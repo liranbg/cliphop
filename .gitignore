@@ -1,0 +1,12 @@
+# Rust
+/target
+**/*.rs.bk
+*.pdb
+
+# Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Environment
+.env

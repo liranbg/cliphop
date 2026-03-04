@@ -1,0 +1,42 @@
+[package]
+name = "cliphop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tao = "0.34"
+global-hotkey = "0.7"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = [
+    "NSString",
+    "NSGeometry",
+    "NSAppleScript",
+    "NSDictionary",
+    "NSAppleEventDescriptor",
+    "NSURL",
+] }
+objc2-app-kit = { version = "0.3", features = [
+    "NSAlert",
+    "NSApplication",
+    "NSBox",
+    "NSButton",
+    "NSCell",
+    "NSColor",
+    "NSControl",
+    "NSEvent",
+    "NSFont",
+    "NSMenu",
+    "NSMenuItem",
+    "NSPasteboard",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSStatusBar",
+    "NSStatusBarButton",
+    "NSStatusItem",
+    "NSImage",
+    "NSTextField",
+    "NSView",
+    "NSWorkspace",
+    "libc",
+] }
+core-graphics = { version = "0.25", features = ["elcapitan"] }
