@@ -1,8 +1,8 @@
 use std::cell::Cell;
 
-use objc2::{define_class, msg_send, sel, AnyThread};
 use objc2::rc::Retained;
 use objc2::runtime::NSObject;
+use objc2::{AnyThread, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationOptions, NSEvent, NSMenu, NSMenuItem, NSWorkspace,
 };

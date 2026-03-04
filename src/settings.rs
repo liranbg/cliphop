@@ -1,12 +1,20 @@
+use std::cell::RefCell;
+
 use objc2::rc::Retained;
 use objc2::runtime::NSObject;
-use objc2::{define_class, msg_send, AnyThread};
+use objc2::{AnyThread, define_class, msg_send};
 use objc2_app_kit::{
-    NSAlert, NSApplicationActivationOptions, NSBox, NSBoxType, NSButton, NSColor,
-    NSControlStateValueOff, NSControlStateValueOn, NSFont, NSImage, NSRunningApplication,
-    NSTextField, NSView,
+    NSAlert, NSApplication, NSApplicationActivationOptions, NSApplicationActivationPolicy, NSBox,
+    NSBoxType, NSButton, NSColor, NSControlStateValueOff, NSControlStateValueOn, NSFont, NSImage,
+    NSMenuItem, NSRunningApplication, NSTextField, NSView, NSWindow,
 };
-use objc2_foundation::{ns_string, MainThreadMarker, NSPoint, NSRect, NSSize, NSString};
+use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString, ns_string};
+
+// Holds the settings alert window while the dialog is open, so re-clicking
+// "Settings..." brings it back to front instead of opening a second dialog.
+thread_local! {
+    static SETTINGS_WINDOW: RefCell<Option<Retained<NSWindow>>> = const { RefCell::new(None) };
+}
 
 // Target for the "Settings..." tray menu item
 define_class!(
@@ -18,7 +26,28 @@ define_class!(
         #[unsafe(method(showSettings:))]
         fn show_settings_action(&self, _sender: &NSObject) {
             let mtm = unsafe { MainThreadMarker::new_unchecked() };
+
+            // If the dialog is already open, just bring it back to front.
+            let already_open = SETTINGS_WINDOW.with(|w| w.borrow().is_some());
+            if already_open {
+                SETTINGS_WINDOW.with(|w| {
+                    if let Some(window) = w.borrow().as_ref() {
+                        window.makeKeyAndOrderFront(None);
+                    }
+                });
+                #[allow(deprecated)]
+                NSRunningApplication::currentApplication()
+                    .activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
+                return;
+            }
+
             show_settings(mtm);
+        }
+
+        // Keep the menu item enabled even while a modal dialog is running.
+        #[unsafe(method(validateMenuItem:))]
+        fn validate_menu_item(&self, _item: &NSMenuItem) -> bool {
+            true
         }
     }
 );
@@ -157,10 +186,7 @@ fn show_settings(mtm: MainThreadMarker) {
             mtm,
         )
     };
-    checkbox.setFrame(NSRect::new(
-        NSPoint::new(0.0, 20.0),
-        NSSize::new(W, 20.0),
-    ));
+    checkbox.setFrame(NSRect::new(NSPoint::new(0.0, 20.0), NSSize::new(W, 20.0)));
     let current_state = if crate::log::is_verbose() {
         NSControlStateValueOn
     } else {
@@ -178,6 +204,9 @@ fn show_settings(mtm: MainThreadMarker) {
     alert.setAccessoryView(Some(&container));
     alert.addButtonWithTitle(&NSString::from_str("Close"));
 
+    // Track the alert window so re-clicking "Settings..." can refocus it.
+    SETTINGS_WINDOW.with(|w| *w.borrow_mut() = Some(alert.window()));
+
     // Bring the app to front without changing the activation policy (which would show a Dock icon).
     // NSRunningApplication activates the process directly, unlike NSApplication.activate()
     // which can switch the policy from .accessory to .regular on macOS 14+.
@@ -187,7 +216,17 @@ fn show_settings(mtm: MainThreadMarker) {
 
     alert.runModal();
 
+    // Clear the window reference now that the dialog has closed.
+    SETTINGS_WINDOW.with(|w| *w.borrow_mut() = None);
+
+    // Hide the dock icon again — showing NSAlert switches the policy to Regular.
+    NSApplication::sharedApplication(mtm)
+        .setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+
     // Persist checkbox state after dialog closes
     let new_verbose = checkbox.state() == NSControlStateValueOn;
     crate::log::set_verbose(new_verbose);
+    if new_verbose {
+        crate::log::log("Verbose logging enabled");
+    }
 }

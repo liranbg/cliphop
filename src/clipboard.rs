@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use objc2_app_kit::NSPasteboard;
-use objc2_foundation::{ns_string, NSString};
+use objc2_foundation::{NSString, ns_string};
 
 /// TODO: make this configurable by the user through a settings menu, and persist across restarts.
 const MAX_HISTORY: usize = 10;
@@ -107,7 +107,13 @@ impl ClipboardHistory {
     fn truncate_clean(text: &str, max_len: usize) -> String {
         let cleaned: String = text
             .chars()
-            .map(|c| if c == '\n' || c == '\r' { '\u{21A9}' } else { c })
+            .map(|c| {
+                if c == '\n' || c == '\r' {
+                    '\u{21A9}'
+                } else {
+                    c
+                }
+            })
             .collect();
 
         if cleaned.chars().count() > max_len {

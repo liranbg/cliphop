@@ -1,7 +1,7 @@
 use objc2::rc::Retained;
 use objc2::sel;
 use objc2_app_kit::{NSImage, NSMenu, NSMenuItem, NSStatusBar, NSStatusItem};
-use objc2_foundation::{ns_string, MainThreadMarker, NSString};
+use objc2_foundation::{MainThreadMarker, NSString, ns_string};
 
 use crate::settings::SettingsTarget;
 

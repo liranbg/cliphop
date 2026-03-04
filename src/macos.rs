@@ -1,7 +1,6 @@
 use objc2_app_kit::NSWorkspace;
 use objc2_foundation::{NSString, NSURL};
 
-
 unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
 }

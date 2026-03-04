@@ -35,7 +35,7 @@ src/
   clipboard.rs    — NSPasteboard polling + history (VecDeque)
   hotkey.rs       — Global hotkey registration (Option+V)
   popup.rs        — Native NSMenu popup at cursor
-  paste.rs        — Cmd+V simulation via CoreGraphics keyboard events
+  paste.rs        — Cmd+V simulation via CoreGraphics keyboard events (CGEvent)
   tray.rs         — Menu bar icon via NSStatusItem
   log.rs          — File-based logger (~/.cliphop/log)
   settings.rs     — Settings dialog (NSAlert)

@@ -44,7 +44,7 @@ pub fn simulate_paste(target_pid: i32) {
             event.post(CGEventTapLocation::HID);
         };
 
-        post(true);  // key down
+        post(true); // key down
         post(false); // key up
 
         crate::log::log("paste thread: Cmd+V posted");
