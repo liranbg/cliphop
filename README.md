@@ -35,7 +35,7 @@ src/
   clipboard.rs    — NSPasteboard polling + history (VecDeque)
   hotkey.rs       — Global hotkey registration (Option+V)
   popup.rs        — Native NSMenu popup at cursor
-  paste.rs        — Cmd+V simulation via NSAppleScript
+  paste.rs        — Cmd+V simulation via CoreGraphics keyboard events
   tray.rs         — Menu bar icon via NSStatusItem
   log.rs          — File-based logger (~/.cliphop/log)
   settings.rs     — Settings dialog (NSAlert)
@@ -66,17 +66,6 @@ cargo run --release
 ```
 
 > **Note:** When running the bare binary (e.g. `./target/release/cliphop`), the Accessibility permission is associated with your **terminal app**, not Cliphop itself. For proper permission handling, run Cliphop as an `.app` bundle (see below) or grant your terminal Accessibility access.
-
-#### Running as a background app (no dock icon)
-
-Bundle the binary with the included `Info.plist`:
-
-```sh
-mkdir -p Cliphop.app/Contents/MacOS
-cp target/release/cliphop Cliphop.app/Contents/MacOS/
-cp Info.plist Cliphop.app/Contents/
-open Cliphop.app
-```
 
 #### Building a DMG for distribution
 

@@ -2,8 +2,9 @@ use objc2::rc::Retained;
 use objc2::runtime::NSObject;
 use objc2::{define_class, msg_send, AnyThread};
 use objc2_app_kit::{
-    NSAlert, NSBox, NSBoxType, NSButton, NSColor, NSControlStateValueOff, NSControlStateValueOn,
-    NSFont, NSImage, NSTextField, NSView,
+    NSAlert, NSApplicationActivationOptions, NSBox, NSBoxType, NSButton, NSColor,
+    NSControlStateValueOff, NSControlStateValueOn, NSFont, NSImage, NSRunningApplication,
+    NSTextField, NSView,
 };
 use objc2_foundation::{ns_string, MainThreadMarker, NSPoint, NSRect, NSSize, NSString};
 
@@ -176,6 +177,13 @@ fn show_settings(mtm: MainThreadMarker) {
 
     alert.setAccessoryView(Some(&container));
     alert.addButtonWithTitle(&NSString::from_str("Close"));
+
+    // Bring the app to front without changing the activation policy (which would show a Dock icon).
+    // NSRunningApplication activates the process directly, unlike NSApplication.activate()
+    // which can switch the policy from .accessory to .regular on macOS 14+.
+    #[allow(deprecated)]
+    NSRunningApplication::currentApplication()
+        .activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
 
     alert.runModal();
 

@@ -54,7 +54,21 @@ swift scripts/generate-icon.swift target
 iconutil -c icns target/Cliphop.iconset -o "${BUNDLE_DIR}/Contents/Resources/Cliphop.icns"
 rm -rf target/Cliphop.iconset
 
-# ─── 4. DMG ───────────────────────────────────────────────────────────────────
+# ─── 4. Code Sign ─────────────────────────────────────────────────────────────
+#
+# TCC (Accessibility permission) ties access to the app's code-signing identity.
+# With a real Developer ID the identity is "team_id + bundle_id", so permissions
+# survive rebuilds.  With ad-hoc ("-") they are tied to the binary hash and will
+# be revoked on every new build — set SIGNING_IDENTITY to your cert to fix this.
+#
+#   export SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+#
+SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"   # default: ad-hoc
+
+echo "==> Signing bundle (identity: ${SIGNING_IDENTITY})..."
+codesign --force --deep --sign "$SIGNING_IDENTITY" "$BUNDLE_DIR"
+
+# ─── 5. DMG ───────────────────────────────────────────────────────────────────
 
 echo "==> Creating DMG..."
 rm -rf "$DMG_DIR"

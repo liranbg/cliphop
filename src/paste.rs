@@ -1,46 +1,52 @@
-use objc2::AnyThread;
-use objc2::runtime::AnyObject;
-use objc2::msg_send;
-use objc2_foundation::{NSAppleScript, NSString};
+use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation, CGKeyCode};
+use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+use objc2_app_kit::NSWorkspace;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-/// Simulates Cmd+V paste via in-process NSAppleScript.
-/// Spawns a background thread to avoid blocking the event loop during the delay.
-pub fn simulate_paste() {
-    thread::spawn(|| {
-        // Wait for the previous app to regain focus
-        thread::sleep(Duration::from_millis(200));
+const KEY_V: CGKeyCode = 0x09; // ANSI_V
 
-        crate::log::log("paste thread: running NSAppleScript keystroke (in-process)");
-
-        let source = NSString::from_str(
-            "tell application \"System Events\" to keystroke \"v\" using command down",
-        );
-
-        let script = match NSAppleScript::initWithSource(NSAppleScript::alloc(), &source) {
-            Some(s) => s,
-            None => {
-                crate::log::log("paste thread: ERROR — failed to create NSAppleScript");
-                return;
+/// Simulates Cmd+V via CoreGraphics keyboard events (requires Accessibility permission).
+/// `target_pid` is the process that was frontmost before our popup; we poll until
+/// it regains focus before posting the events.
+pub fn simulate_paste(target_pid: i32) {
+    thread::spawn(move || {
+        // Poll until the target app is frontmost again, with a 200ms timeout.
+        let deadline = Instant::now() + Duration::from_millis(200);
+        loop {
+            let frontmost = NSWorkspace::sharedWorkspace()
+                .frontmostApplication()
+                .map(|a| a.processIdentifier())
+                .unwrap_or(-1);
+            if frontmost == target_pid {
+                break;
             }
-        };
-
-        // Use raw msg_send! to handle nil returns safely (the generated binding
-        // declares a non-optional Retained return which panics on nil).
-        let mut error_dict: *mut AnyObject = std::ptr::null_mut();
-        let result: *mut AnyObject = unsafe {
-            msg_send![&*script, executeAndReturnError: &mut error_dict]
-        };
-
-        if result.is_null() || !error_dict.is_null() {
-            crate::log::log(&format!(
-                "paste thread: NSAppleScript failed (result_null={}, error_null={})",
-                result.is_null(),
-                error_dict.is_null()
-            ));
-        } else {
-            crate::log::log("paste thread: NSAppleScript succeeded");
+            if Instant::now() >= deadline {
+                crate::log::log("paste thread: timeout waiting for target app to regain focus");
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
         }
+
+        crate::log::log("paste thread: posting Cmd+V via CoreGraphics");
+
+        let Ok(source) = CGEventSource::new(CGEventSourceStateID::HIDSystemState) else {
+            crate::log::log("paste thread: ERROR — CGEventSource::new failed");
+            return;
+        };
+
+        let post = |key_down: bool| {
+            let Ok(event) = CGEvent::new_keyboard_event(source.clone(), KEY_V, key_down) else {
+                crate::log::log("paste thread: ERROR — CGEvent::new_keyboard_event failed");
+                return;
+            };
+            event.set_flags(CGEventFlags::CGEventFlagCommand);
+            event.post(CGEventTapLocation::HID);
+        };
+
+        post(true);  // key down
+        post(false); // key up
+
+        crate::log::log("paste thread: Cmd+V posted");
     });
 }

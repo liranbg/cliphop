@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
 static LOG_FILE: Mutex<Option<String>> = Mutex::new(None);
-static VERBOSE: AtomicBool = AtomicBool::new(true);
+static VERBOSE: AtomicBool = AtomicBool::new(false);
 
 pub fn init() {
     let dir = format!("{}/.cliphop", std::env::var("HOME").unwrap_or_default());

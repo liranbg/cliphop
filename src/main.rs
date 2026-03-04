@@ -9,6 +9,7 @@ mod tray;
 
 use clipboard::ClipboardHistory;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
+use objc2_app_kit::NSWorkspace;
 use objc2_foundation::MainThreadMarker;
 use std::time::{Duration, Instant};
 use tao::event::{Event, StartCause};
@@ -100,6 +101,13 @@ fn main() {
             if items.is_empty() {
                 log::log("No items to show, skipping popup");
             } else {
+                // Capture the frontmost app before the popup grabs focus,
+                // so simulate_paste knows which app to wait for.
+                let target_pid = NSWorkspace::sharedWorkspace()
+                    .frontmostApplication()
+                    .map(|a| a.processIdentifier())
+                    .unwrap_or(-1);
+
                 log::log(&format!("Showing popup with {} items", items.len()));
                 match popup::show_popup(&items, mtm) {
                     Some(index) => {
@@ -112,7 +120,7 @@ fn main() {
                                     ClipboardHistory::display_label(&text)
                                 ));
                                 log::log("Calling simulate_paste()");
-                                paste::simulate_paste();
+                                paste::simulate_paste(target_pid);
                             }
                             None => {
                                 log::log(&format!(
