@@ -334,5 +334,7 @@ fn show_settings(mtm: MainThreadMarker) {
     crate::log::set_verbose(new_verbose);
     if new_verbose {
         crate::log::log("Verbose logging enabled");
+    } else {
+        crate::log::log("Verbose logging disabled");
     }
 }
