@@ -64,7 +64,7 @@ fn main() {
             }
             Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
                 if history.poll() {
-                    log::log(&format!(
+                    log::log_verbose(&format!(
                         "Clipboard changed, history now has {} items",
                         history.items().len()
                     ));
