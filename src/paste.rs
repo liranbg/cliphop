@@ -28,7 +28,7 @@ pub fn simulate_paste(target_pid: i32) {
             thread::sleep(Duration::from_millis(10));
         }
 
-        crate::log::log("paste thread: posting Cmd+V via CoreGraphics");
+        crate::log::log_verbose("paste thread: posting Cmd+V via CoreGraphics");
 
         let Ok(source) = CGEventSource::new(CGEventSourceStateID::HIDSystemState) else {
             crate::log::log("paste thread: ERROR — CGEventSource::new failed");
@@ -47,6 +47,6 @@ pub fn simulate_paste(target_pid: i32) {
         post(true); // key down
         post(false); // key up
 
-        crate::log::log("paste thread: Cmd+V posted");
+        crate::log::log_verbose("paste thread: Cmd+V posted");
     });
 }

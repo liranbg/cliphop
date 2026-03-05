@@ -79,7 +79,7 @@ fn main() {
             && event.id == hotkey.hotkey.id()
             && event.state == HotKeyState::Pressed
         {
-            log::log(&format!(
+            log::log_verbose(&format!(
                 "Hotkey pressed, {} items in history",
                 history.items().len()
             ));
@@ -108,18 +108,14 @@ fn main() {
                     .map(|a| a.processIdentifier())
                     .unwrap_or(-1);
 
-                log::log(&format!("Showing popup with {} items", items.len()));
+                log::log_verbose(&format!("Showing popup with {} items", items.len()));
                 match popup::show_popup(&items, mtm) {
                     Some(index) => {
-                        log::log(&format!("Popup returned: index={}", index));
+                        log::log_verbose(&format!("Popup returned: index={}", index));
                         match history.select(index) {
-                            Some(text) => {
-                                log::log(&format!(
-                                    "Clipboard set to item {}: \"{}\"",
-                                    index,
-                                    ClipboardHistory::display_label(&text)
-                                ));
-                                log::log("Calling simulate_paste()");
+                            Some(..) => {
+                                log::log_verbose(&format!("Clipboard set to item {}:", index,));
+                                log::log_verbose("Calling simulate_paste()");
                                 paste::simulate_paste(target_pid);
                             }
                             None => {
@@ -131,7 +127,7 @@ fn main() {
                         }
                     }
                     None => {
-                        log::log("Popup dismissed without selection");
+                        log::log_verbose("Popup dismissed without selection");
                     }
                 }
             }
