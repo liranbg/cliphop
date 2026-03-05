@@ -1,8 +1,26 @@
-use objc2_app_kit::NSWorkspace;
-use objc2_foundation::{NSString, NSURL};
+use std::ffi::c_void;
 
+// Accessibility framework (HIServices) — permission check and prompt
 unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
+    static kAXTrustedCheckOptionPrompt: *const c_void;
+    fn AXIsProcessTrustedWithOptions(options: *const c_void) -> bool;
+}
+
+// CoreFoundation helpers for building the options dictionary
+unsafe extern "C" {
+    static kCFBooleanTrue: *const c_void;
+    static kCFTypeDictionaryKeyCallBacks: u8;
+    static kCFTypeDictionaryValueCallBacks: u8;
+    fn CFDictionaryCreate(
+        allocator: *const c_void,
+        keys: *const *const c_void,
+        values: *const *const c_void,
+        num_values: isize,
+        key_callbacks: *const c_void,
+        value_callbacks: *const c_void,
+    ) -> *const c_void;
+    fn CFRelease(cf: *const c_void);
 }
 
 /// Returns whether the current process has Accessibility permission.
@@ -10,26 +28,23 @@ pub fn is_accessibility_trusted() -> bool {
     unsafe { AXIsProcessTrusted() }
 }
 
-/// Logs the current Accessibility permission status (called once at startup).
-pub fn check_accessibility() {
-    let trusted = is_accessibility_trusted();
-    crate::log::log(&format!("AXIsProcessTrusted() = {}", trusted));
-    if !trusted {
-        crate::log::log(
-            "WARNING: Accessibility NOT granted — paste will not work! \
-             If you recently rebuilt, remove and re-add Cliphop in \
-             System Settings > Privacy & Security > Accessibility.",
+/// Calls `AXIsProcessTrustedWithOptions` with `kAXTrustedCheckOptionPrompt`,
+/// which prompts macOS to show the Accessibility permission dialog if not
+/// already trusted.
+pub fn request_accessibility_trust() -> bool {
+    unsafe {
+        let keys = [kAXTrustedCheckOptionPrompt];
+        let values = [kCFBooleanTrue];
+        let options = CFDictionaryCreate(
+            std::ptr::null(),
+            keys.as_ptr(),
+            values.as_ptr(),
+            1,
+            (&raw const kCFTypeDictionaryKeyCallBacks) as *const c_void,
+            (&raw const kCFTypeDictionaryValueCallBacks) as *const c_void,
         );
-    }
-}
-
-/// Opens System Settings → Privacy & Security → Accessibility pane.
-pub fn open_accessibility_settings() {
-    let url_string = NSString::from_str(
-        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-    );
-    if let Some(url) = NSURL::URLWithString(&url_string) {
-        let workspace = NSWorkspace::sharedWorkspace();
-        workspace.openURL(&url);
+        let result = AXIsProcessTrustedWithOptions(options);
+        CFRelease(options);
+        result
     }
 }

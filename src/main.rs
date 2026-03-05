@@ -35,7 +35,14 @@ fn update_tray(tray: &tray::Tray, history: &ClipboardHistory) {
 fn main() {
     log::init();
     log::log("Cliphop starting up...");
-    macos::check_accessibility();
+
+    if !macos::is_accessibility_trusted() {
+        crate::log::log(
+            "WARNING: Accessibility NOT granted — paste will not work! \
+             If you recently rebuilt, remove and re-add Cliphop in \
+             System Settings > Privacy & Security > Accessibility.",
+        );
+    }
 
     let event_loop = EventLoop::new();
 
