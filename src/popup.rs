@@ -21,7 +21,7 @@ define_class!(
         #[unsafe(method(itemClicked:))]
         fn item_clicked(&self, sender: &NSMenuItem) {
             let tag = sender.tag();
-            crate::log::log(&format!("PopupTarget.itemClicked: tag={}", tag));
+            crate::log::log_verbose(&format!("PopupTarget.itemClicked: tag={}", tag));
             POPUP_RESULT.with(|c| c.set(Some(tag as usize)));
         }
     }
@@ -43,13 +43,13 @@ pub fn show_popup(items: &[(usize, String, String)], mtm: MainThreadMarker) -> O
     let frontmost = workspace.frontmostApplication();
     if let Some(app) = &frontmost {
         let name = app.localizedName();
-        crate::log::log(&format!(
+        crate::log::log_verbose(&format!(
             "Previous frontmost app: pid={}, name={:?}",
             app.processIdentifier(),
             name.map(|n| n.to_string())
         ));
     } else {
-        crate::log::log("WARNING: No frontmost application found");
+        crate::log::log_verbose("WARNING: No frontmost application found");
     }
 
     let target = PopupTarget::new();
@@ -77,18 +77,18 @@ pub fn show_popup(items: &[(usize, String, String)], mtm: MainThreadMarker) -> O
     let app = NSApplication::sharedApplication(mtm);
     #[allow(deprecated)]
     app.activateIgnoringOtherApps(true);
-    crate::log::log("Activated Cliphop app for popup");
+    crate::log::log_verbose("Activated Cliphop app for popup");
 
     // Show at cursor position (blocks until dismissed)
     let location = NSEvent::mouseLocation();
-    crate::log::log(&format!(
+    crate::log::log_verbose(&format!(
         "Showing NSMenu at ({}, {})",
         location.x, location.y
     ));
     menu.popUpMenuPositioningItem_atLocation_inView(None, location, None);
 
     let result = POPUP_RESULT.with(|c| c.get());
-    crate::log::log(&format!("NSMenu dismissed, result={:?}", result));
+    crate::log::log_verbose(&format!("NSMenu dismissed, result={:?}", result));
 
     // Restore focus to the previous app so paste targets it
     if result.is_some()
@@ -97,7 +97,7 @@ pub fn show_popup(items: &[(usize, String, String)], mtm: MainThreadMarker) -> O
         #[allow(deprecated)]
         let ok =
             prev.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
-        crate::log::log(&format!(
+        crate::log::log_verbose(&format!(
             "Restored focus, activateWithOptions returned {}",
             ok
         ));

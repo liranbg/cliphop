@@ -34,7 +34,14 @@ fn update_tray(tray: &tray::Tray, history: &ClipboardHistory) {
 fn main() {
     log::init();
     log::log("Cliphop starting up...");
-    macos::check_accessibility();
+
+    if !macos::is_accessibility_trusted() {
+        crate::log::log(
+            "WARNING: Accessibility NOT granted — paste will not work! \
+             If you recently rebuilt, remove and re-add Cliphop in \
+             System Settings > Privacy & Security > Accessibility.",
+        );
+    }
 
     let event_loop = EventLoop::new();
 
@@ -63,7 +70,7 @@ fn main() {
             }
             Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
                 if history.poll() {
-                    log::log(&format!(
+                    log::log_verbose(&format!(
                         "Clipboard changed, history now has {} items",
                         history.items().len()
                     ));
@@ -78,7 +85,7 @@ fn main() {
             && event.id == hotkey.hotkey.id()
             && event.state == HotKeyState::Pressed
         {
-            log::log(&format!(
+            log::log_verbose(&format!(
                 "Hotkey pressed, {} items in history",
                 history.items().len()
             ));
@@ -107,18 +114,14 @@ fn main() {
                     .map(|a| a.processIdentifier())
                     .unwrap_or(-1);
 
-                log::log(&format!("Showing popup with {} items", items.len()));
+                log::log_verbose(&format!("Showing popup with {} items", items.len()));
                 match popup::show_popup(&items, mtm) {
                     Some(index) => {
-                        log::log(&format!("Popup returned: index={}", index));
+                        log::log_verbose(&format!("Popup returned: index={}", index));
                         match history.select(index) {
-                            Some(text) => {
-                                log::log(&format!(
-                                    "Clipboard set to item {}: \"{}\"",
-                                    index,
-                                    ClipboardHistory::display_label(&text)
-                                ));
-                                log::log("Calling simulate_paste()");
+                            Some(..) => {
+                                log::log_verbose(&format!("Clipboard set to item {}:", index,));
+                                log::log_verbose("Calling simulate_paste()");
                                 paste::simulate_paste(target_pid);
                             }
                             None => {
@@ -130,7 +133,7 @@ fn main() {
                         }
                     }
                     None => {
-                        log::log("Popup dismissed without selection");
+                        log::log_verbose("Popup dismissed without selection");
                     }
                 }
             }

@@ -71,21 +71,13 @@ impl ClipboardHistory {
         pasteboard.clearContents();
         let ns_text = NSString::from_str(&text);
         let ok = pasteboard.setString_forType(&ns_text, ns_string!("public.utf8-plain-text"));
-        crate::log::log(&format!(
+        crate::log::log_verbose(&format!(
             "clipboard.select({}): setString_forType returned {}",
             index, ok
         ));
 
-        // Verify the clipboard content
-        let verify = pasteboard.stringForType(ns_string!("public.utf8-plain-text"));
-        crate::log::log(&format!(
-            "clipboard.select({}): verify read back = {:?}",
-            index,
-            verify.map(|s| Self::display_label(&s.to_string()))
-        ));
-
         self.last_change_count = pasteboard.changeCount();
-        crate::log::log(&format!(
+        crate::log::log_verbose(&format!(
             "clipboard.select({}): changeCount now = {}",
             index, self.last_change_count
         ));

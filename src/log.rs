@@ -16,10 +16,20 @@ pub fn init() {
     *LOG_FILE.lock().unwrap() = Some(path);
 }
 
+/// Always writes to the log file (for startup messages, errors, and important events).
 pub fn log(msg: &str) {
+    write_log(msg);
+}
+
+/// Only writes when verbose logging is enabled (for detailed debug info).
+pub fn log_verbose(msg: &str) {
     if !VERBOSE.load(Ordering::Relaxed) {
         return;
     }
+    write_log(msg);
+}
+
+fn write_log(msg: &str) {
     let guard = LOG_FILE.lock().unwrap();
     let Some(path) = guard.as_ref() else { return };
     let now = SystemTime::now()
