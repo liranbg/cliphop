@@ -58,22 +58,78 @@ impl SettingsTarget {
     }
 }
 
-// Target for the "Open System Settings" button inside the dialog.
-// Delegates to crate::macos::open_accessibility_settings().
+// ── Accessibility UI targets ─────────────────────────────────────────
+
+// Target for the "Request Access" button inside the settings dialog.
 define_class!(
     #[unsafe(super(NSObject))]
     #[name = "OpenAccessibilityTarget"]
     struct OpenAccessibilityTarget;
 
     impl OpenAccessibilityTarget {
-        #[unsafe(method(openAccessibilitySettings:))]
-        fn open_accessibility_settings(&self, _sender: &NSObject) {
-            crate::macos::open_accessibility_settings();
+        #[unsafe(method(requestAccess:))]
+        fn request_access(&self, _sender: &NSObject) {
+            crate::macos::request_accessibility_trust();
+            // Lower our window level so the OS accessibility prompt appears in front.
+            SETTINGS_WINDOW.with(|w| {
+                if let Some(window) = w.borrow().as_ref() {
+                    window.setLevel(0);
+                }
+            });
         }
     }
 );
 
 impl OpenAccessibilityTarget {
+    fn new() -> Retained<Self> {
+        unsafe { msg_send![Self::alloc(), init] }
+    }
+}
+
+// Thread-locals for live accessibility status updates in the settings dialog.
+thread_local! {
+    static AX_STATUS_LABEL: RefCell<Option<Retained<NSTextField>>> = const { RefCell::new(None) };
+    static AX_OPEN_BUTTON: RefCell<Option<Retained<NSButton>>> = const { RefCell::new(None) };
+}
+
+// Timer target that polls accessibility status and updates the settings UI.
+define_class!(
+    #[unsafe(super(NSObject))]
+    #[name = "AccessibilityTimerTarget"]
+    struct AccessibilityTimerTarget;
+
+    impl AccessibilityTimerTarget {
+        #[unsafe(method(tick:))]
+        fn tick(&self, _timer: &NSObject) {
+            let trusted = crate::macos::is_accessibility_trusted();
+            AX_STATUS_LABEL.with(|label| {
+                if let Some(label) = label.borrow().as_ref() {
+                    let text = if trusted {
+                        "\u{2705} Granted"
+                    } else {
+                        "\u{26A0}\u{FE0F} Not Granted"
+                    };
+                    label.setStringValue(&NSString::from_str(text));
+                    if trusted {
+                        label.setToolTip(None);
+                    } else {
+                        label.setToolTip(Some(&NSString::from_str(
+                            "Remove and re-add Cliphop in System Settings > \
+                             Privacy & Security > Accessibility",
+                        )));
+                    }
+                }
+            });
+            AX_OPEN_BUTTON.with(|button| {
+                if let Some(button) = button.borrow().as_ref() {
+                    button.setHidden(trusted);
+                }
+            });
+        }
+    }
+);
+
+impl AccessibilityTimerTarget {
     fn new() -> Retained<Self> {
         unsafe { msg_send![Self::alloc(), init] }
     }
@@ -104,6 +160,44 @@ fn make_separator(y: f64, mtm: MainThreadMarker) -> Retained<NSBox> {
     );
     sep.setBoxType(NSBoxType::Separator);
     sep
+}
+
+/// Starts a 2-second timer that polls accessibility status and updates the
+/// given label and button. Uses `NSRunLoopCommonModes` so it fires during
+/// modal dialog sessions (`runModal` uses `NSModalPanelRunLoopMode`).
+fn start_accessibility_timer(
+    label: Retained<NSTextField>,
+    button: Retained<NSButton>,
+) -> Retained<NSObject> {
+    AX_STATUS_LABEL.with(|l| *l.borrow_mut() = Some(label));
+    AX_OPEN_BUTTON.with(|b| *b.borrow_mut() = Some(button));
+
+    let timer_target = AccessibilityTimerTarget::new();
+    unsafe {
+        let timer_cls = objc2::runtime::AnyClass::get(c"NSTimer").unwrap();
+        let timer: Retained<NSObject> = msg_send![
+            timer_cls,
+            timerWithTimeInterval: 2.0_f64,
+            target: &*timer_target,
+            selector: objc2::sel!(tick:),
+            userInfo: Option::<&NSObject>::None,
+            repeats: true
+        ];
+
+        let run_loop_cls = objc2::runtime::AnyClass::get(c"NSRunLoop").unwrap();
+        let run_loop: Retained<NSObject> = msg_send![run_loop_cls, currentRunLoop];
+        let common_modes = NSString::from_str("kCFRunLoopCommonModes");
+        let () = msg_send![&*run_loop, addTimer: &*timer, forMode: &*common_modes];
+
+        timer
+    }
+}
+
+/// Stops the accessibility status timer and clears view references.
+fn stop_accessibility_timer(timer: &NSObject) {
+    let () = unsafe { msg_send![timer, invalidate] };
+    AX_STATUS_LABEL.with(|l| *l.borrow_mut() = None);
+    AX_OPEN_BUTTON.with(|b| *b.borrow_mut() = None);
 }
 
 // ── Dialog ───────────────────────────────────────────────────────────
@@ -138,37 +232,43 @@ fn show_settings(mtm: MainThreadMarker) {
 
     let trusted = crate::macos::is_accessibility_trusted();
 
-    let _open_target = if trusted {
-        let ax_status = make_label("\u{2705} Granted", 74.0, mtm);
-        container.addSubview(&ax_status);
-        None
-    } else {
-        let ax_status = make_label("\u{26A0}\u{FE0F} Not Granted", 76.0, mtm);
-        ax_status.setFrame(NSRect::new(
-            NSPoint::new(0.0, 76.0),
-            NSSize::new(120.0, 18.0),
-        ));
+    // Accessibility status label (always present, text updated live by timer)
+    let ax_status = make_label(
+        if trusted {
+            "\u{2705} Granted"
+        } else {
+            "\u{26A0}\u{FE0F} Not Granted"
+        },
+        76.0,
+        mtm,
+    );
+    ax_status.setFrame(NSRect::new(
+        NSPoint::new(0.0, 76.0),
+        NSSize::new(120.0, 18.0),
+    ));
+    if !trusted {
         ax_status.setToolTip(Some(&NSString::from_str(
             "Remove and re-add Cliphop in System Settings > Privacy & Security > Accessibility",
         )));
-        container.addSubview(&ax_status);
+    }
+    container.addSubview(&ax_status);
 
-        let open_target = OpenAccessibilityTarget::new();
-        let open_button = unsafe {
-            NSButton::buttonWithTitle_target_action(
-                &NSString::from_str("Open System Settings"),
-                Some(&open_target),
-                Some(objc2::sel!(openAccessibilitySettings:)),
-                mtm,
-            )
-        };
-        open_button.setFrame(NSRect::new(
-            NSPoint::new(120.0, 72.0),
-            NSSize::new(175.0, 26.0),
-        ));
-        container.addSubview(&open_button);
-        Some(open_target)
+    // "Request Access" button (always present, hidden when already trusted)
+    let open_target = OpenAccessibilityTarget::new();
+    let open_button = unsafe {
+        NSButton::buttonWithTitle_target_action(
+            &NSString::from_str("Request Access"),
+            Some(&open_target),
+            Some(objc2::sel!(requestAccess:)),
+            mtm,
+        )
     };
+    open_button.setFrame(NSRect::new(
+        NSPoint::new(120.0, 72.0),
+        NSSize::new(175.0, 26.0),
+    ));
+    open_button.setHidden(trusted);
+    container.addSubview(&open_button);
 
     // Separator
     let sep = make_separator(64.0, mtm);
@@ -214,7 +314,13 @@ fn show_settings(mtm: MainThreadMarker) {
     NSRunningApplication::currentApplication()
         .activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
 
+    // Start live accessibility status polling (updates label & button while modal runs)
+    let timer = start_accessibility_timer(ax_status, open_button);
+
     alert.runModal();
+
+    // Stop the timer and clear view references
+    stop_accessibility_timer(&timer);
 
     // Clear the window reference now that the dialog has closed.
     SETTINGS_WINDOW.with(|w| *w.borrow_mut() = None);

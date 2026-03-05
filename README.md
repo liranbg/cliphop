@@ -11,8 +11,8 @@ Cliphop runs in the background as a menu bar app, tracking your last 10 clipboar
 - Select items by clicking or pressing **0-9** on the keyboard
 - Automatic deduplication — re-copying text moves it to the front
 - Menu bar icon with clipboard history preview
-- Settings dialog with accessibility status, verbose logging toggle, and log file path
-- One-click link to open System Settings for Accessibility permissions
+- Settings dialog with live-updating accessibility status, verbose logging toggle, and log file path
+- "Request Access" button triggers the macOS Accessibility permission prompt and opens System Settings
 
 ## Usage
 
@@ -39,7 +39,7 @@ src/
   tray.rs         — Menu bar icon via NSStatusItem
   log.rs          — File-based logger (~/.cliphop/log)
   settings.rs     — Settings dialog (NSAlert)
-  macos.rs        — macOS platform helpers (accessibility, System Settings)
+  macos.rs        — macOS FFI bridge (accessibility permission check/prompt, System Settings)
 ```
 
 ## Roadmap
