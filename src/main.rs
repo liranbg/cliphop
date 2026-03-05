@@ -1,13 +1,12 @@
-mod clipboard;
 mod hotkey;
-mod log;
 mod macos;
 mod paste;
 mod popup;
 mod settings;
 mod tray;
 
-use clipboard::ClipboardHistory;
+use cliphop::clipboard::ClipboardHistory;
+use cliphop::log;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use objc2_app_kit::NSWorkspace;
 use objc2_foundation::MainThreadMarker;

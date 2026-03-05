@@ -14,6 +14,7 @@ pub struct ClipboardHistory {
 }
 
 impl ClipboardHistory {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let pasteboard = NSPasteboard::generalPasteboard();
         let count = pasteboard.changeCount();
@@ -122,5 +123,87 @@ impl ClipboardHistory {
         } else {
             cleaned
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_label_short_string_unchanged() {
+        assert_eq!(
+            ClipboardHistory::display_label("hello world"),
+            "hello world"
+        );
+    }
+
+    #[test]
+    fn display_label_empty_string() {
+        assert_eq!(ClipboardHistory::display_label(""), "");
+    }
+
+    #[test]
+    fn display_label_exact_boundary_no_truncation() {
+        let input: String = "a".repeat(LABEL_LEN);
+        let result = ClipboardHistory::display_label(&input);
+        assert_eq!(result, input);
+        assert!(!result.ends_with("..."));
+    }
+
+    #[test]
+    fn display_label_one_over_boundary_truncated() {
+        let input: String = "a".repeat(LABEL_LEN + 1);
+        let result = ClipboardHistory::display_label(&input);
+        assert_eq!(result.chars().count(), LABEL_LEN + 3);
+        assert!(result.ends_with("..."));
+    }
+
+    #[test]
+    fn display_label_newlines_replaced() {
+        let result = ClipboardHistory::display_label("line1\nline2\rline3");
+        assert_eq!(result, "line1\u{21A9}line2\u{21A9}line3");
+    }
+
+    #[test]
+    fn display_label_newlines_and_truncation_combined() {
+        let input = "hello\nworld\n".repeat(10);
+        let result = ClipboardHistory::display_label(&input);
+        assert!(result.ends_with("..."));
+        assert!(!result.contains('\n'));
+        assert!(result.contains('\u{21A9}'));
+    }
+
+    #[test]
+    fn display_tooltip_longer_limit() {
+        let input: String = "b".repeat(TOOLTIP_LEN);
+        assert_eq!(ClipboardHistory::display_tooltip(&input), input);
+
+        let long_input: String = "b".repeat(TOOLTIP_LEN + 1);
+        let result = ClipboardHistory::display_tooltip(&long_input);
+        assert!(result.ends_with("..."));
+        assert_eq!(result.chars().count(), TOOLTIP_LEN + 3);
+    }
+
+    #[test]
+    fn display_label_preserves_unicode() {
+        let input = "caf\u{e9} \u{1F600}";
+        assert_eq!(ClipboardHistory::display_label(input), input);
+    }
+
+    #[test]
+    fn display_label_only_newlines() {
+        assert_eq!(
+            ClipboardHistory::display_label("\n\r\n"),
+            "\u{21A9}\u{21A9}\u{21A9}"
+        );
+    }
+
+    #[test]
+    fn display_label_preserves_tabs_and_spaces() {
+        assert_eq!(
+            ClipboardHistory::display_label("hello\tworld there"),
+            "hello\tworld there"
+        );
     }
 }
