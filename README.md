@@ -1,80 +1,91 @@
+<div align="center">
+
 # Cliphop
 
-A lightweight clipboard history manager for macOS, built in Rust.
+**A tiny, fast clipboard history manager for macOS - built in Rust.**
 
-Cliphop runs in the background as a menu bar app, tracking your last 10 clipboard text entries. Press **Option+V** to show a popup menu at your cursor and quickly paste any previous item.
+Press **Option+V** to instantly access your last clipboard entries.
+
+No Dock icon. No bloat. Just your clipboard, always within reach.
+
+[![CI](https://github.com/liranbg/cliphop/actions/workflows/ci.yml/badge.svg)](https://github.com/liranbg/cliphop/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+</div>
+
+---
+
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/liranbg/cliphop/main/scripts/install.sh | sh
+```
+
+Then launch it:
+
+```sh
+open -a Cliphop
+```
+
+> macOS will ask for **Accessibility** permission on first use — grant it in **System Settings > Privacy & Security > Accessibility**.
+
+To uninstall:
+```sh
+rm -rf /Applications/Cliphop.app
+```
+
+## How It Works
+
+1. Copy text as usual (**Cmd+C**)
+2. Press **Option+V** — a popup appears at your cursor
+3. Click an item or press its number key (**0-9**) to paste it
 
 ## Features
 
-- Stores last 10 text clipboard entries in memory
-- Global hotkey (**Option+V**) shows a native popup menu at cursor
-- Select items by clicking or pressing **0-9** on the keyboard
-- Automatic deduplication — re-copying text moves it to the front
+- Stores last **10** text clipboard entries in memory
+- **Option+V** global hotkey shows a native popup menu at your cursor
+- Automatic deduplication — re-copying moves the entry to the front
 - Menu bar icon with clipboard history preview
-- Settings dialog with live-updating accessibility status, verbose logging toggle, and log file path
-- "Request Access" button triggers the macOS Accessibility permission prompt and opens System Settings
-
-## Usage
-
-1. Copy text as usual (Cmd+C)
-2. Press **Option+V** to open the clipboard history popup
-3. Click an item or press its number key (**0-9**) to paste it into the active application
-4. Click the menu bar icon to browse your clipboard history, open Settings, or quit
+- Settings dialog with live accessibility status and verbose logging toggle
+- Runs as a pure menu bar agent — no Dock icon, no windows
 
 ## Permissions
 
-Cliphop requires **Accessibility** access to simulate Cmd+V for pasting. macOS will prompt you to grant this on first use via System Settings > Privacy & Security > Accessibility.
+Cliphop needs **Accessibility** access to simulate Cmd+V for pasting. macOS prompts you on first use.
 
-> **Note:** After rebuilding the binary, macOS invalidates the Accessibility permission. You must remove and re-add Cliphop in System Settings > Privacy & Security > Accessibility.
-
-## Architecture
-
-```text
-src/
-  main.rs         — Event loop (tao), wires everything together
-  clipboard.rs    — NSPasteboard polling + history (VecDeque)
-  hotkey.rs       — Global hotkey registration (Option+V)
-  popup.rs        — Native NSMenu popup at cursor
-  paste.rs        — Cmd+V simulation via CoreGraphics keyboard events (CGEvent)
-  tray.rs         — Menu bar icon via NSStatusItem
-  log.rs          — File-based logger (~/.cliphop/log)
-  settings.rs     — Settings dialog (NSAlert)
-  macos.rs        — macOS FFI bridge (accessibility permission check/prompt, System Settings)
-```
+> After rebuilding from source, macOS invalidates the permission. Remove and re-add Cliphop in System Settings > Privacy & Security > Accessibility.
 
 ## Roadmap
 
 - [ ] Pin entries
 - [ ] Configurable stack size
 - [ ] Clear stack
-- [ ] Configurable hot-key
+- [ ] Configurable hotkey
 - [ ] Self update
-- [ ] Folder support — group entries into named folders (one level deep); folders are composites of nested entries and appear alongside flat entries in the history popup
+- [ ] Folder support - group entries into named folders
 
 ## Development
 
-### Requirements
-
-- macOS
-- Rust 1.85+ (edition 2024)
-- Accessibility permission (macOS will prompt on first paste)
-
-### Build & Run
+**Requirements:** macOS, Rust 1.85+ (edition 2024)
 
 ```sh
 cargo build --release
 cargo run --release
 ```
 
-> **Note:** When running the bare binary (e.g. `./target/release/cliphop`), the Accessibility permission is associated with your **terminal app**, not Cliphop itself. For proper permission handling, run Cliphop as an `.app` bundle (see below) or grant your terminal Accessibility access.
-
-#### Building a DMG for distribution
+Build a distributable DMG:
 
 ```sh
 ./scripts/build-dmg.sh
 ```
 
-This builds a release binary, bundles it as `Cliphop.app`, and creates `target/Cliphop.dmg`.
+Create a release (bumps version in `Cargo.toml`, commits, tags, and pushes — CI builds the DMG and publishes a GitHub release):
+
+```sh
+./scripts/release.sh 0.2.0
+```
+
+> When running the bare binary, Accessibility permission is tied to your **terminal app**. For proper handling, run as an `.app` bundle or grant your terminal Accessibility access.
 
 ## License
 
