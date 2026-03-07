@@ -58,7 +58,7 @@ cargo generate-lockfile --quiet
 
 # Commit + tag + push
 git add Cargo.toml Cargo.lock
-git commit -m "Release ${TAG}"
+git commit --allow-empty -m "Release ${TAG}"
 git tag -a "$TAG" -m "Release ${TAG}"
 git push origin main "$TAG"
 
