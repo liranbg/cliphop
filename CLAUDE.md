@@ -28,7 +28,31 @@ cargo fmt
 cargo clippy
 ```
 
-There are no tests in this project yet.
+## Testing
+
+```bash
+# Run unit tests (display formatting, truncation logic)
+cargo test --lib
+
+# Run integration tests (clipboard polling, selection, E2E flow)
+# MUST use --test-threads=1 since tests share the system clipboard
+cargo test --test clipboard_integration -- --test-threads=1
+
+# Run all tests
+cargo test -- --test-threads=1
+```
+
+```bash
+# Run GUI E2E test (builds app, launches it, drives UI via osascript)
+# Requires: Accessibility permissions for Terminal, macOS only
+./tests/e2e_gui.sh
+```
+
+**Notes:**
+- Integration tests write to the system clipboard — your clipboard contents will be overwritten during the test run
+- All clipboard-touching tests must run serially (single-threaded) to avoid races on the shared system clipboard
+- The GUI E2E test (`tests/e2e_gui.sh`) uses only macOS built-in tools (`osascript`, `pbcopy`, `pbpaste`) — no third-party dependencies
+- The GUI E2E test requires Accessibility permissions for Terminal (System Settings > Privacy & Security > Accessibility)
 
 ## Architecture
 
