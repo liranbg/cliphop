@@ -29,12 +29,8 @@ POLL_WAIT=1  # seconds to wait for the app to poll clipboard
 # ── Helpers ───────────────────────────────────────────────────────────
 
 cleanup() {
-    if [[ -n "$APP_PID" ]] && kill -0 "$APP_PID" 2>/dev/null; then
-        kill "$APP_PID" 2>/dev/null || true
-        wait "$APP_PID" 2>/dev/null || true
-    fi
     # Close TextEdit if we opened it
-    osascript -e 'tell application "TextEdit" to quit' 2>/dev/null || true
+    osascript -e 'tell application "TextEdit" to quit saving no' 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -184,16 +180,7 @@ assert_clipboard "gui_test_B" "Selecting 1st item via popup sets clipboard"
 
 echo ""
 echo "Cleaning up..."
-
-osascript -e '
-tell application "TextEdit"
-    close every document saving no
-    quit
-end tell' 2>/dev/null || true
-
-kill "$APP_PID" 2>/dev/null || true
-wait "$APP_PID" 2>/dev/null || true
-APP_PID=""
+cleanup
 
 # ── Summary ───────────────────────────────────────────────────────────
 
