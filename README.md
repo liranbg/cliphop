@@ -49,6 +49,7 @@ src/
 - [ ] Clear stack
 - [ ] Configurable hot-key
 - [ ] Self update
+- [ ] Folder support — group entries into named folders (one level deep); folders are composites of nested entries and appear alongside flat entries in the history popup
 
 ## Development
 
