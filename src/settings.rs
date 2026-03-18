@@ -6,7 +6,7 @@ use objc2::{AnyThread, define_class, msg_send};
 use objc2_app_kit::{
     NSAlert, NSApplication, NSApplicationActivationOptions, NSApplicationActivationPolicy, NSBox,
     NSBoxType, NSButton, NSColor, NSControlStateValueOff, NSControlStateValueOn, NSFont, NSImage,
-    NSMenuItem, NSRunningApplication, NSTextField, NSView, NSWindow,
+    NSMenuItem, NSRunningApplication, NSStepper, NSTextField, NSView, NSWindow,
 };
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString, ns_string};
 
@@ -220,14 +220,24 @@ fn show_settings(mtm: MainThreadMarker) {
     )));
 
     // ── Accessory view ───────────────────────────────────────────────
-    let h: f64 = 118.0;
+    // Layout (y=0 at bottom, increasing upward):
+    //   157: Accessibility header
+    //   136: Accessibility status label / 132: Request Access button
+    //   124: Separator (Accessibility / History)
+    //    97: History header
+    //    72: History row (label + text field + stepper + range hint)
+    //    64: Separator (History / Logging)
+    //    42: Logging header
+    //    20: Verbose logging checkbox
+    //     0: Log file path
+    let h: f64 = 178.0;
     let container = NSView::initWithFrame(
         mtm.alloc(),
         NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(W, h)),
     );
 
-    // Section: Accessibility
-    let ax_header = make_header("Accessibility", 97.0, mtm);
+    // Section: Accessibility (shifted +60 from original positions)
+    let ax_header = make_header("Accessibility", 157.0, mtm);
     container.addSubview(&ax_header);
 
     let trusted = crate::macos::is_accessibility_trusted();
@@ -239,11 +249,11 @@ fn show_settings(mtm: MainThreadMarker) {
         } else {
             "\u{26A0}\u{FE0F} Not Granted"
         },
-        76.0,
+        136.0,
         mtm,
     );
     ax_status.setFrame(NSRect::new(
-        NSPoint::new(0.0, 76.0),
+        NSPoint::new(0.0, 136.0),
         NSSize::new(120.0, 18.0),
     ));
     if !trusted {
@@ -264,15 +274,66 @@ fn show_settings(mtm: MainThreadMarker) {
         )
     };
     open_button.setFrame(NSRect::new(
-        NSPoint::new(120.0, 72.0),
+        NSPoint::new(120.0, 132.0),
         NSSize::new(175.0, 26.0),
     ));
     open_button.setHidden(trusted);
     container.addSubview(&open_button);
 
-    // Separator
-    let sep = make_separator(64.0, mtm);
-    container.addSubview(&sep);
+    // Separator (Accessibility / History)
+    let sep1 = make_separator(124.0, mtm);
+    container.addSubview(&sep1);
+
+    // Section: History
+    let history_header = make_header("History", 97.0, mtm);
+    container.addSubview(&history_header);
+
+    // History row: "Items:" label + editable text field + stepper + range hint
+    let items_label = NSTextField::labelWithString(&NSString::from_str("Items:"), mtm);
+    items_label.setFrame(NSRect::new(NSPoint::new(0.0, 72.0), NSSize::new(50.0, 22.0)));
+    container.addSubview(&items_label);
+
+    let current_limit = cliphop::clipboard::get_max_history() as isize;
+
+    let history_field = NSTextField::initWithFrame(
+        mtm.alloc(),
+        NSRect::new(NSPoint::new(54.0, 74.0), NSSize::new(44.0, 19.0)),
+    );
+    history_field.setIntegerValue(current_limit);
+    container.addSubview(&history_field);
+
+    let stepper = NSStepper::initWithFrame(
+        mtm.alloc(),
+        NSRect::new(NSPoint::new(100.0, 72.0), NSSize::new(19.0, 22.0)),
+    );
+    unsafe {
+        stepper.setMinValue(cliphop::config::MIN_MAX_HISTORY as f64);
+        stepper.setMaxValue(cliphop::config::MAX_MAX_HISTORY as f64);
+        stepper.setIncrement(1.0);
+        stepper.setIntegerValue(current_limit);
+        // Clicking the stepper arrows pushes its integer value into the text field.
+        stepper.setTarget(Some(&*history_field));
+        stepper.setAction(Some(objc2::sel!(takeIntegerValueFrom:)));
+    }
+    container.addSubview(&stepper);
+
+    let range_hint = NSTextField::labelWithString(
+        &NSString::from_str(&format!(
+            "({}–{})",
+            cliphop::config::MIN_MAX_HISTORY,
+            cliphop::config::MAX_MAX_HISTORY,
+        )),
+        mtm,
+    );
+    range_hint.setFrame(NSRect::new(NSPoint::new(124.0, 72.0), NSSize::new(80.0, 22.0)));
+    range_hint.setTextColor(Some(&NSColor::secondaryLabelColor()));
+    let small_font = NSFont::systemFontOfSize(NSFont::smallSystemFontSize());
+    range_hint.setFont(Some(&small_font));
+    container.addSubview(&range_hint);
+
+    // Separator (History / Logging)
+    let sep2 = make_separator(64.0, mtm);
+    container.addSubview(&sep2);
 
     // Section: Logging
     let log_header = make_header("Logging", 42.0, mtm);
@@ -287,7 +348,7 @@ fn show_settings(mtm: MainThreadMarker) {
         )
     };
     checkbox.setFrame(NSRect::new(NSPoint::new(0.0, 20.0), NSSize::new(W, 20.0)));
-    let current_state = if crate::log::is_verbose() {
+    let current_state = if cliphop::log::is_verbose() {
         NSControlStateValueOn
     } else {
         NSControlStateValueOff
@@ -295,7 +356,7 @@ fn show_settings(mtm: MainThreadMarker) {
     checkbox.setState(current_state);
     container.addSubview(&checkbox);
 
-    let path_label = make_label(&crate::log::log_path(), 0.0, mtm);
+    let path_label = make_label(&cliphop::log::log_path(), 0.0, mtm);
     path_label.setTextColor(Some(&NSColor::secondaryLabelColor()));
     let small = NSFont::systemFontOfSize(NSFont::smallSystemFontSize());
     path_label.setFont(Some(&small));
@@ -329,12 +390,26 @@ fn show_settings(mtm: MainThreadMarker) {
     NSApplication::sharedApplication(mtm)
         .setActivationPolicy(NSApplicationActivationPolicy::Accessory);
 
-    // Persist checkbox state after dialog closes
+    // Read and apply settings after dialog closes
     let new_verbose = checkbox.state() == NSControlStateValueOn;
-    crate::log::set_verbose(new_verbose);
+    let raw_history = unsafe { history_field.integerValue() };
+    let new_history = (raw_history as usize).clamp(
+        cliphop::config::MIN_MAX_HISTORY,
+        cliphop::config::MAX_MAX_HISTORY,
+    );
+
+    cliphop::log::set_verbose(new_verbose);
+    cliphop::clipboard::set_max_history(new_history);
+    cliphop::clipboard::request_trim();
+
+    cliphop::config::save(&cliphop::config::Config {
+        verbose_logging: new_verbose,
+        max_history: new_history,
+    });
+
     if new_verbose {
-        crate::log::log("Verbose logging enabled");
+        cliphop::log::log("Verbose logging enabled");
     } else {
-        crate::log::log("Verbose logging disabled");
+        cliphop::log::log("Verbose logging disabled");
     }
 }

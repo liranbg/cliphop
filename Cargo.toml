@@ -35,6 +35,7 @@ objc2-app-kit = { version = "0.3", features = [
     "NSStatusItem",
     "NSImage",
     "NSTextField",
+    "NSStepper",
     "NSView",
     "NSWindow",
     "NSWorkspace",

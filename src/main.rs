@@ -5,7 +5,8 @@ mod popup;
 mod settings;
 mod tray;
 
-use cliphop::clipboard::ClipboardHistory;
+use cliphop::clipboard::{self, ClipboardHistory};
+use cliphop::config;
 use cliphop::log;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use objc2_app_kit::NSWorkspace;
@@ -34,6 +35,10 @@ fn update_tray(tray: &tray::Tray, history: &ClipboardHistory) {
 fn main() {
     log::init();
     log::log("Cliphop starting up...");
+
+    let cfg = config::load();
+    clipboard::set_max_history(cfg.max_history);
+    log::set_verbose(cfg.verbose_logging);
 
     if !macos::is_accessibility_trusted() {
         crate::log::log(
