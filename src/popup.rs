@@ -6,7 +6,7 @@ use objc2::{AnyThread, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationOptions, NSEvent, NSMenu, NSMenuItem, NSWorkspace,
 };
-use objc2_foundation::{MainThreadMarker, NSString};
+use objc2_foundation::{MainThreadMarker, NSString, ns_string};
 
 thread_local! {
     static POPUP_RESULT: Cell<Option<usize>> = const { Cell::new(None) };
@@ -58,13 +58,12 @@ pub fn show_popup(items: &[(usize, String, String)], mtm: MainThreadMarker) -> O
 
     for (idx, label, tooltip) in items {
         let title = NSString::from_str(&format!("{}: {}", idx, label));
-        let key = NSString::from_str(&idx.to_string());
         let item = unsafe {
             NSMenuItem::initWithTitle_action_keyEquivalent(
                 mtm.alloc(),
                 &title,
                 Some(sel!(itemClicked:)),
-                &key,
+                ns_string!(""),
             )
         };
         item.setTag(*idx as isize);

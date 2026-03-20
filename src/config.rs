@@ -157,8 +157,6 @@ mod tests {
     #[test]
     fn round_trip() {
         let path = tmp_path("cliphop_test_roundtrip.config");
-        // Can't call save() directly (needs log module), so write manually
-        // and verify load_from reads it correctly.
         fs::write(&path, "verbose_logging=true\nmax_history=42\n").unwrap();
         let cfg = load_from(&path);
         assert!(cfg.verbose_logging);

@@ -125,7 +125,7 @@ fn main() {
                         log::log_verbose(&format!("Popup returned: index={}", index));
                         match history.select(index) {
                             Some(..) => {
-                                log::log_verbose(&format!("Clipboard set to item {}:", index,));
+                                log::log_verbose(&format!("Clipboard set to item {}", index));
                                 log::log_verbose("Calling simulate_paste()");
                                 paste::simulate_paste(target_pid);
                             }

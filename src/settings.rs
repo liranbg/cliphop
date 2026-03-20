@@ -406,11 +406,12 @@ fn show_settings(mtm: MainThreadMarker) {
 
     // Read and apply settings after dialog closes
     let new_verbose = checkbox.state() == NSControlStateValueOn;
-    let raw_history = { history_field.integerValue() };
-    let new_history = (raw_history as usize).clamp(
-        cliphop::config::MIN_MAX_HISTORY,
-        cliphop::config::MAX_MAX_HISTORY,
-    );
+    let new_history = history_field
+        .integerValue()
+        .clamp(
+            cliphop::config::MIN_MAX_HISTORY as isize,
+            cliphop::config::MAX_MAX_HISTORY as isize,
+        ) as usize;
 
     cliphop::log::set_verbose(new_verbose);
     cliphop::clipboard::set_max_history(new_history);
