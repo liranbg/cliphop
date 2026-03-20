@@ -290,7 +290,10 @@ fn show_settings(mtm: MainThreadMarker) {
 
     // History row: "Items:" label + editable text field + stepper + range hint
     let items_label = NSTextField::labelWithString(&NSString::from_str("Items:"), mtm);
-    items_label.setFrame(NSRect::new(NSPoint::new(0.0, 72.0), NSSize::new(50.0, 22.0)));
+    items_label.setFrame(NSRect::new(
+        NSPoint::new(0.0, 72.0),
+        NSSize::new(50.0, 22.0),
+    ));
     container.addSubview(&items_label);
 
     let current_limit = cliphop::clipboard::get_max_history() as isize;
@@ -325,7 +328,10 @@ fn show_settings(mtm: MainThreadMarker) {
         )),
         mtm,
     );
-    range_hint.setFrame(NSRect::new(NSPoint::new(124.0, 72.0), NSSize::new(80.0, 22.0)));
+    range_hint.setFrame(NSRect::new(
+        NSPoint::new(124.0, 72.0),
+        NSSize::new(80.0, 22.0),
+    ));
     range_hint.setTextColor(Some(&NSColor::secondaryLabelColor()));
     let small_font = NSFont::systemFontOfSize(NSFont::smallSystemFontSize());
     range_hint.setFont(Some(&small_font));
@@ -392,7 +398,7 @@ fn show_settings(mtm: MainThreadMarker) {
 
     // Read and apply settings after dialog closes
     let new_verbose = checkbox.state() == NSControlStateValueOn;
-    let raw_history = unsafe { history_field.integerValue() };
+    let raw_history = { history_field.integerValue() };
     let new_history = (raw_history as usize).clamp(
         cliphop::config::MIN_MAX_HISTORY,
         cliphop::config::MAX_MAX_HISTORY,

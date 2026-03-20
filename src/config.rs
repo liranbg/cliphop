@@ -93,10 +93,14 @@ mod tests {
         let contents = fs::read_to_string(&path).unwrap();
         let mut cfg = Config::default();
         for line in contents.lines() {
-            let Some((key, value)) = line.split_once('=') else { continue };
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
             match key.trim() {
                 "verbose_logging" => {
-                    if let Ok(b) = value.trim().parse::<bool>() { cfg.verbose_logging = b; }
+                    if let Ok(b) = value.trim().parse::<bool>() {
+                        cfg.verbose_logging = b;
+                    }
                 }
                 "max_history" => {
                     if let Ok(n) = value.trim().parse::<usize>() {
@@ -132,10 +136,14 @@ mod tests {
         let contents = "unknown_key=foo\nmax_history=7\n";
         let mut cfg = Config::default();
         for line in contents.lines() {
-            let Some((key, value)) = line.split_once('=') else { continue };
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
             match key.trim() {
                 "verbose_logging" => {
-                    if let Ok(b) = value.trim().parse::<bool>() { cfg.verbose_logging = b; }
+                    if let Ok(b) = value.trim().parse::<bool>() {
+                        cfg.verbose_logging = b;
+                    }
                 }
                 "max_history" => {
                     if let Ok(n) = value.trim().parse::<usize>() {
@@ -154,10 +162,14 @@ mod tests {
         let contents = "max_history=notanumber\nverbose_logging=notabool\n";
         let mut cfg = Config::default();
         for line in contents.lines() {
-            let Some((key, value)) = line.split_once('=') else { continue };
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
             match key.trim() {
                 "verbose_logging" => {
-                    if let Ok(b) = value.trim().parse::<bool>() { cfg.verbose_logging = b; }
+                    if let Ok(b) = value.trim().parse::<bool>() {
+                        cfg.verbose_logging = b;
+                    }
                 }
                 "max_history" => {
                     if let Ok(n) = value.trim().parse::<usize>() {
