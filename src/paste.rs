@@ -11,8 +11,8 @@ const KEY_V: CGKeyCode = 0x09; // ANSI_V
 /// it regains focus before posting the events.
 pub fn simulate_paste(target_pid: i32) {
     thread::spawn(move || {
-        // Poll until the target app is frontmost again, with a 200ms timeout.
-        let deadline = Instant::now() + Duration::from_millis(200);
+        // Poll until the target app is frontmost again, with a 500ms timeout.
+        let deadline = Instant::now() + Duration::from_millis(500);
         loop {
             let frontmost = NSWorkspace::sharedWorkspace()
                 .frontmostApplication()
@@ -27,6 +27,11 @@ pub fn simulate_paste(target_pid: i32) {
             }
             thread::sleep(Duration::from_millis(10));
         }
+
+        // Allow the target app's window to fully settle before posting keyboard events.
+        // Some apps (browsers, terminals, non-text windows) need a brief moment after
+        // becoming frontmost before they can correctly receive Cmd+V.
+        thread::sleep(Duration::from_millis(50));
 
         crate::log::log_verbose("paste thread: posting Cmd+V via CoreGraphics");
 
