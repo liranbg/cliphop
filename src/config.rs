@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::Path;
 
 pub const DEFAULT_MAX_HISTORY: usize = 10;
 pub const MIN_MAX_HISTORY: usize = 1;
@@ -83,7 +82,10 @@ pub fn save(config: &Config) {
         return;
     }
     if let Err(e) = fs::rename(&tmp, &path) {
-        crate::log::log(&format!("config.save: failed to rename {} -> {}: {}", tmp, path, e));
+        crate::log::log(&format!(
+            "config.save: failed to rename {} -> {}: {}",
+            tmp, path, e
+        ));
         let _ = fs::remove_file(&tmp);
     }
 }
