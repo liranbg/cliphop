@@ -298,6 +298,8 @@ fn show_settings(mtm: MainThreadMarker) {
 
     let current_limit = cliphop::clipboard::get_max_history() as isize;
 
+    // y=74 (vs label at y=72): 2px upward nudge to optically center the text field
+    // against the taller "Items:" label.
     let history_field = NSTextField::initWithFrame(
         mtm.alloc(),
         NSRect::new(NSPoint::new(54.0, 74.0), NSSize::new(44.0, 19.0)),
@@ -314,7 +316,13 @@ fn show_settings(mtm: MainThreadMarker) {
         stepper.setMaxValue(cliphop::config::MAX_MAX_HISTORY as f64);
         stepper.setIncrement(1.0);
         stepper.setIntegerValue(current_limit);
-        // Clicking the stepper arrows pushes its integer value into the text field.
+        // Wire stepper → text field: clicking arrows calls `takeIntegerValueFrom:` on
+        // the field, which reads the stepper's integerValue and updates its display.
+        // The reverse (typing → stepper) is not wired; we always read history_field
+        // at close time so the saved value is always correct regardless.
+        //
+        // Safety: history_field lives on the stack until after runModal() returns, so
+        // the raw pointer stored inside the stepper is valid for the entire modal session.
         stepper.setTarget(Some(&*history_field));
         stepper.setAction(Some(objc2::sel!(takeIntegerValueFrom:)));
     }

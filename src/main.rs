@@ -41,7 +41,7 @@ fn main() {
     log::set_verbose(cfg.verbose_logging);
 
     if !macos::is_accessibility_trusted() {
-        crate::log::log(
+        log::log(
             "WARNING: Accessibility NOT granted — paste will not work! \
              If you recently rebuilt, remove and re-add Cliphop in \
              System Settings > Privacy & Security > Accessibility.",
