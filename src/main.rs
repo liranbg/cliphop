@@ -70,11 +70,11 @@ fn main() {
 
         match event {
             Event::NewEvents(StartCause::Init) => {
-                history.poll();
+                let _ = history.poll(); // discard on init; tray rebuilt unconditionally below
                 update_tray(&tray, &history);
             }
             Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
-                if history.poll() {
+                if history.poll().is_some() {
                     log::log_verbose(&format!(
                         "Clipboard changed, history now has {} items",
                         history.items().len()
