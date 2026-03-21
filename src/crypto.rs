@@ -20,7 +20,11 @@ pub fn encrypt(key: &[u8; 32], plaintext: &[u8]) -> Result<([u8; 12], Vec<u8>), 
     Ok((nonce, ciphertext))
 }
 
-pub fn decrypt(key: &[u8; 32], nonce: &[u8; 12], ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn decrypt(
+    key: &[u8; 32],
+    nonce: &[u8; 12],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
     let cipher = Aes256Gcm::new(key.into());
     let nonce_arr: aes_gcm::Nonce<_> = (*nonce).into();
     cipher
