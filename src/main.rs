@@ -60,6 +60,8 @@ fn main() {
     // Load persisted history into memory
     let loaded = history::load();
     let mut history = ClipboardHistory::new();
+    // filter_map intentional: future variants (Image, File) will not be text-pasteable.
+    #[allow(clippy::unnecessary_filter_map)]
     let persisted_texts: Vec<String> = loaded
         .into_iter()
         .filter_map(|e| match e {

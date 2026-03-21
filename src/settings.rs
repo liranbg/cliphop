@@ -523,9 +523,9 @@ fn show_settings(mtm: MainThreadMarker) {
 
     // Apply launch-at-login change if toggled
     let new_login = login_checkbox.state() == NSControlStateValueOn;
-    if new_login != login_enabled {
-        if let Err(e) = crate::macos::set_launch_at_login(new_login) {
-            cliphop::log::log(&format!("set_launch_at_login failed: {}", e));
-        }
+    if new_login != login_enabled
+        && let Err(e) = crate::macos::set_launch_at_login(new_login)
+    {
+        cliphop::log::log(&format!("set_launch_at_login failed: {}", e));
     }
 }
