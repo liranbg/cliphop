@@ -53,5 +53,5 @@ pub fn set_verbose(enabled: bool) {
 
 pub fn log_path() -> String {
     let guard = LOG_FILE.lock().unwrap();
-    guard.clone().unwrap_or_default()
+    guard.as_deref().unwrap_or_default().to_owned()
 }
