@@ -43,6 +43,10 @@ pub fn request_accessibility_trust() -> bool {
             (&raw const kCFTypeDictionaryKeyCallBacks) as *const c_void,
             (&raw const kCFTypeDictionaryValueCallBacks) as *const c_void,
         );
+        if options.is_null() {
+            // Allocation failure: fall back to a plain trusted check (no prompt).
+            return AXIsProcessTrusted();
+        }
         let result = AXIsProcessTrustedWithOptions(options);
         CFRelease(options);
         result

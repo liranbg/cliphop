@@ -1,39 +1,25 @@
 use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation, CGKeyCode};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-use objc2_app_kit::NSWorkspace;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const KEY_V: CGKeyCode = 0x09; // ANSI_V
 
 /// Simulates Cmd+V via CoreGraphics keyboard events (requires Accessibility permission).
-/// `target_pid` is the process that was frontmost before our popup; we poll until
-/// it regains focus before posting the events.
+/// `target_pid` is the process that was frontmost before our popup; focus has already been
+/// restored to it by `show_popup` before this is called.
 pub fn simulate_paste(target_pid: i32) {
     thread::spawn(move || {
-        // Poll until the target app is frontmost again, with a 500ms timeout.
-        let deadline = Instant::now() + Duration::from_millis(500);
-        loop {
-            let frontmost = NSWorkspace::sharedWorkspace()
-                .frontmostApplication()
-                .map(|a| a.processIdentifier())
-                .unwrap_or(-1);
-            if frontmost == target_pid {
-                break;
-            }
-            if Instant::now() >= deadline {
-                crate::log::log("paste thread: timeout waiting for target app to regain focus");
-                break;
-            }
-            thread::sleep(Duration::from_millis(10));
-        }
+        // Give the target app time to finish receiving focus after `activateWithOptions`.
+        // NSWorkspace cannot be queried safely from a background thread, so we use a
+        // fixed sleep instead of polling frontmostApplication().
+        // 100ms is enough for all tested apps (browsers, terminals, editors).
+        thread::sleep(Duration::from_millis(100));
 
-        // Allow the target app's window to fully settle before posting keyboard events.
-        // Some apps (browsers, terminals, non-text windows) need a brief moment after
-        // becoming frontmost before they can correctly receive Cmd+V.
-        thread::sleep(Duration::from_millis(50));
-
-        crate::log::log_verbose("paste thread: posting Cmd+V via CoreGraphics");
+        crate::log::log_verbose(&format!(
+            "paste thread: posting Cmd+V to pid={} via CoreGraphics",
+            target_pid
+        ));
 
         let Ok(source) = CGEventSource::new(CGEventSourceStateID::HIDSystemState) else {
             crate::log::log("paste thread: ERROR — CGEventSource::new failed");

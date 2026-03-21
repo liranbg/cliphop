@@ -5,7 +5,8 @@ mod popup;
 mod settings;
 mod tray;
 
-use cliphop::clipboard::ClipboardHistory;
+use cliphop::clipboard::{self, ClipboardHistory};
+use cliphop::config;
 use cliphop::log;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use objc2_app_kit::NSWorkspace;
@@ -35,8 +36,12 @@ fn main() {
     log::init();
     log::log("Cliphop starting up...");
 
+    let cfg = config::load();
+    clipboard::set_max_history(cfg.max_history);
+    log::set_verbose(cfg.verbose_logging);
+
     if !macos::is_accessibility_trusted() {
-        crate::log::log(
+        log::log(
             "WARNING: Accessibility NOT granted — paste will not work! \
              If you recently rebuilt, remove and re-add Cliphop in \
              System Settings > Privacy & Security > Accessibility.",
@@ -120,7 +125,7 @@ fn main() {
                         log::log_verbose(&format!("Popup returned: index={}", index));
                         match history.select(index) {
                             Some(..) => {
-                                log::log_verbose(&format!("Clipboard set to item {}:", index,));
+                                log::log_verbose(&format!("Clipboard set to item {}", index));
                                 log::log_verbose("Calling simulate_paste()");
                                 paste::simulate_paste(target_pid);
                             }

@@ -1,13 +1,15 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::SystemTime;
+use std::time::Instant;
 
 static LOG_FILE: Mutex<Option<String>> = Mutex::new(None);
 static VERBOSE: AtomicBool = AtomicBool::new(false);
+static START: OnceLock<Instant> = OnceLock::new();
 
 pub fn init() {
+    START.get_or_init(Instant::now);
     let dir = format!("{}/.cliphop", std::env::var("HOME").unwrap_or_default());
     let _ = fs::create_dir_all(&dir);
     let path = format!("{}/log", dir);
@@ -32,12 +34,10 @@ pub fn log_verbose(msg: &str) {
 fn write_log(msg: &str) {
     let guard = LOG_FILE.lock().unwrap();
     let Some(path) = guard.as_ref() else { return };
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs();
-    let millis = now.subsec_millis();
-    let line = format!("[{secs}.{millis:03}] {msg}\n");
+    let elapsed = START.get().map(|s| s.elapsed()).unwrap_or_default();
+    let secs = elapsed.as_secs();
+    let millis = elapsed.subsec_millis();
+    let line = format!("[+{secs}.{millis:03}] {msg}\n");
     if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(path) {
         let _ = f.write_all(line.as_bytes());
     }
@@ -53,5 +53,5 @@ pub fn set_verbose(enabled: bool) {
 
 pub fn log_path() -> String {
     let guard = LOG_FILE.lock().unwrap();
-    guard.clone().unwrap_or_default()
+    guard.as_deref().unwrap_or_default().to_owned()
 }

@@ -1,10 +1,31 @@
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use objc2_app_kit::NSPasteboard;
 use objc2_foundation::{NSString, ns_string};
 
-/// TODO: make this configurable by the user through a settings menu, and persist across restarts.
-const MAX_HISTORY: usize = 10;
+static MAX_HISTORY: AtomicUsize = AtomicUsize::new(10);
+static TRIM_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+pub fn set_max_history(n: usize) {
+    MAX_HISTORY.store(
+        n.clamp(
+            crate::config::MIN_MAX_HISTORY,
+            crate::config::MAX_MAX_HISTORY,
+        ),
+        Ordering::Relaxed,
+    );
+}
+
+pub fn get_max_history() -> usize {
+    MAX_HISTORY.load(Ordering::Relaxed)
+}
+
+/// Signals the next `ClipboardHistory::poll()` call to trim items to the current limit.
+pub fn request_trim() {
+    TRIM_REQUESTED.store(true, Ordering::Relaxed);
+}
+
 const LABEL_LEN: usize = 30;
 const TOOLTIP_LEN: usize = 300;
 
@@ -26,6 +47,10 @@ impl ClipboardHistory {
 
     /// Polls the clipboard for changes. Returns true if a new item was added.
     pub fn poll(&mut self) -> bool {
+        if TRIM_REQUESTED.swap(false, Ordering::Relaxed) {
+            self.trim_to_limit();
+        }
+
         let pasteboard = NSPasteboard::generalPasteboard();
         let count = pasteboard.changeCount();
 
@@ -52,7 +77,7 @@ impl ClipboardHistory {
 
         self.items.push_front(text);
 
-        if self.items.len() > MAX_HISTORY {
+        if self.items.len() > MAX_HISTORY.load(Ordering::Relaxed) {
             self.items.pop_back();
         }
 
@@ -83,6 +108,13 @@ impl ClipboardHistory {
         ));
 
         Some(text)
+    }
+
+    fn trim_to_limit(&mut self) {
+        let limit = MAX_HISTORY.load(Ordering::Relaxed);
+        while self.items.len() > limit {
+            self.items.pop_back();
+        }
     }
 
     /// Returns a truncated, single-line display label for menu rendering.
