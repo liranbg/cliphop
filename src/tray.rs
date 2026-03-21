@@ -1,9 +1,30 @@
 use objc2::rc::Retained;
-use objc2::sel;
+use objc2::runtime::NSObject;
+use objc2::{AnyThread, define_class, msg_send, sel};
 use objc2_app_kit::{NSImage, NSMenu, NSMenuItem, NSStatusBar, NSStatusItem};
 use objc2_foundation::{MainThreadMarker, NSString, ns_string};
 
-use crate::settings::SettingsTarget;
+use crate::settings::{self, SettingsTarget};
+
+define_class!(
+    #[unsafe(super(NSObject))]
+    #[name = "ClearHistoryTarget"]
+    pub struct ClearHistoryTarget;
+
+    impl ClearHistoryTarget {
+        #[unsafe(method(clearHistory:))]
+        fn clear_history_action(&self, _sender: &NSObject) {
+            let mtm = unsafe { MainThreadMarker::new_unchecked() };
+            settings::confirm_and_clear_history(mtm);
+        }
+    }
+);
+
+impl ClearHistoryTarget {
+    pub fn new() -> Retained<Self> {
+        unsafe { msg_send![Self::alloc(), init] }
+    }
+}
 
 /// NSVariableStatusItemLength
 const VARIABLE_LENGTH: f64 = -1.0;
@@ -11,6 +32,7 @@ const VARIABLE_LENGTH: f64 = -1.0;
 pub struct Tray {
     status_item: Retained<NSStatusItem>,
     settings_target: Retained<SettingsTarget>,
+    clear_history_target: Retained<ClearHistoryTarget>,
     mtm: MainThreadMarker,
 }
 
@@ -31,13 +53,20 @@ impl Tray {
         }
 
         let settings_target = SettingsTarget::new();
+        let clear_history_target = ClearHistoryTarget::new();
 
         // Build initial empty menu
-        status_item.setMenu(Some(&Self::build_menu(&[], &settings_target, mtm)));
+        status_item.setMenu(Some(&Self::build_menu(
+            &[],
+            &settings_target,
+            &clear_history_target,
+            mtm,
+        )));
 
         Self {
             status_item,
             settings_target,
+            clear_history_target,
             mtm,
         }
     }
@@ -47,6 +76,7 @@ impl Tray {
         self.status_item.setMenu(Some(&Self::build_menu(
             items,
             &self.settings_target,
+            &self.clear_history_target,
             self.mtm,
         )));
     }
@@ -54,6 +84,7 @@ impl Tray {
     fn build_menu(
         items: &[(String, String)],
         settings_target: &SettingsTarget,
+        clear_history_target: &ClearHistoryTarget,
         mtm: MainThreadMarker,
     ) -> Retained<NSMenu> {
         let menu = NSMenu::new(mtm);
@@ -85,7 +116,20 @@ impl Tray {
             }
         }
 
-        // Separator + Settings + Quit
+        // Separator + Clear History + separator + Settings + Quit
+        menu.addItem(&NSMenuItem::separatorItem(mtm));
+
+        let clear_item = unsafe {
+            NSMenuItem::initWithTitle_action_keyEquivalent(
+                mtm.alloc(),
+                &NSString::from_str("Clear History"),
+                Some(objc2::sel!(clearHistory:)),
+                ns_string!(""),
+            )
+        };
+        unsafe { clear_item.setTarget(Some(clear_history_target)) };
+        menu.addItem(&clear_item);
+
         menu.addItem(&NSMenuItem::separatorItem(mtm));
 
         let settings_item = unsafe {
