@@ -1,5 +1,8 @@
 use std::ffi::c_void;
 
+#[link(name = "ServiceManagement", kind = "framework")]
+unsafe extern "C" {}
+
 // Accessibility framework (HIServices) — permission check and prompt
 unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
@@ -50,5 +53,52 @@ pub fn request_accessibility_trust() -> bool {
         let result = AXIsProcessTrustedWithOptions(options);
         CFRelease(options);
         result
+    }
+}
+
+/// Returns true if Cliphop is registered as a login item via SMAppService (macOS 13+).
+/// Returns false if SMAppService is unavailable or the app is not registered.
+pub fn launch_at_login_status() -> bool {
+    unsafe {
+        let Some(cls) = objc2::runtime::AnyClass::get(c"SMAppService") else {
+            return false;
+        };
+        let service: objc2::rc::Retained<objc2::runtime::NSObject> =
+            objc2::msg_send![cls, mainAppService];
+        // SMAppServiceStatusEnabled = 1
+        let status: isize = objc2::msg_send![&*service, status];
+        status == 1
+    }
+}
+
+/// Registers (enabled=true) or unregisters (enabled=false) Cliphop as a login item.
+/// Returns Err with a description if the call fails (e.g. bare binary, macOS < 13).
+pub fn set_launch_at_login(enabled: bool) -> Result<(), String> {
+    unsafe {
+        let Some(cls) = objc2::runtime::AnyClass::get(c"SMAppService") else {
+            return Err("SMAppService unavailable (requires macOS 13+)".to_string());
+        };
+        let service: objc2::rc::Retained<objc2::runtime::NSObject> =
+            objc2::msg_send![cls, mainAppService];
+
+        let mut err_ptr: *mut objc2::runtime::NSObject = std::ptr::null_mut();
+        let ok: bool = if enabled {
+            objc2::msg_send![&*service, registerAndReturnError: &mut err_ptr]
+        } else {
+            objc2::msg_send![&*service, unregisterAndReturnError: &mut err_ptr]
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            let description = if err_ptr.is_null() {
+                "unknown error".to_string()
+            } else {
+                let desc: objc2::rc::Retained<objc2_foundation::NSString> =
+                    objc2::msg_send![&*err_ptr, localizedDescription];
+                desc.to_string()
+            };
+            Err(description)
+        }
     }
 }
