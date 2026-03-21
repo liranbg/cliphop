@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose::STANDARD as B64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as B64};
 
 pub enum HistoryEntry {
     Text(String),
@@ -40,7 +40,6 @@ pub fn clear() {
 
 // ── Injectable implementations (used by both production wrappers and tests) ──
 
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn load_from(path: &str, key: [u8; 32]) -> Vec<HistoryEntry> {
     let contents = match std::fs::read_to_string(path) {
         Ok(c) => c,
@@ -144,7 +143,6 @@ pub fn load_from(path: &str, key: [u8; 32]) -> Vec<HistoryEntry> {
     results
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn save_all_to(path: &str, key: [u8; 32], items: &[String]) {
     let dir = cliphop_dir_for(path);
     if let Err(e) = std::fs::create_dir_all(&dir) {
@@ -172,10 +170,7 @@ pub fn save_all_to(path: &str, key: [u8; 32], items: &[String]) {
     let json = match serde_json::to_string(&arr) {
         Ok(s) => s,
         Err(e) => {
-            crate::log::log(&format!(
-                "history.save_all_to: JSON serialize error: {}",
-                e
-            ));
+            crate::log::log(&format!("history.save_all_to: JSON serialize error: {}", e));
             return;
         }
     };
@@ -191,12 +186,11 @@ pub fn save_all_to(path: &str, key: [u8; 32], items: &[String]) {
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn clear_file(path: &str) {
-    if let Err(e) = std::fs::remove_file(path) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            crate::log::log(&format!("history.clear_file: {}", e));
-        }
+    if let Err(e) = std::fs::remove_file(path)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        crate::log::log(&format!("history.clear_file: {}", e));
     }
 }
 
@@ -205,7 +199,7 @@ fn cliphop_dir_for(history_path: &str) -> String {
     std::path::Path::new(history_path)
         .parent()
         .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| cliphop_dir())
+        .unwrap_or_else(cliphop_dir)
 }
 
 #[cfg(test)]
@@ -241,7 +235,11 @@ mod tests {
         let path = tmp_path("cliphop_hist_test_order");
         let _ = fs::remove_file(&path);
         let key = test_key();
-        let items = vec!["first".to_string(), "second".to_string(), "third".to_string()];
+        let items = vec![
+            "first".to_string(),
+            "second".to_string(),
+            "third".to_string(),
+        ];
         save_all_to(&path, key, &items);
         let entries = load_from(&path, key);
         let texts: Vec<String> = entries
@@ -279,7 +277,10 @@ mod tests {
         let path = tmp_path("cliphop_hist_test_clear");
         let key = test_key();
         save_all_to(&path, key, &["item".to_string()]);
-        assert!(fs::metadata(&path).is_ok(), "file should exist before clear");
+        assert!(
+            fs::metadata(&path).is_ok(),
+            "file should exist before clear"
+        );
         clear_file(&path);
         assert!(
             fs::metadata(&path).is_err(),
