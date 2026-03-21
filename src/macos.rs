@@ -1,3 +1,5 @@
+use objc2::{msg_send, rc::Retained, runtime::NSObject};
+use objc2_foundation::NSString;
 use std::ffi::c_void;
 
 #[link(name = "ServiceManagement", kind = "framework")]
@@ -63,10 +65,9 @@ pub fn launch_at_login_status() -> bool {
         let Some(cls) = objc2::runtime::AnyClass::get(c"SMAppService") else {
             return false;
         };
-        let service: objc2::rc::Retained<objc2::runtime::NSObject> =
-            objc2::msg_send![cls, mainAppService];
+        let service: Retained<NSObject> = msg_send![cls, mainAppService];
         // SMAppServiceStatusEnabled = 1
-        let status: isize = objc2::msg_send![&*service, status];
+        let status: isize = msg_send![&*service, status];
         status == 1
     }
 }
@@ -78,14 +79,13 @@ pub fn set_launch_at_login(enabled: bool) -> Result<(), String> {
         let Some(cls) = objc2::runtime::AnyClass::get(c"SMAppService") else {
             return Err("SMAppService unavailable (requires macOS 13+)".to_string());
         };
-        let service: objc2::rc::Retained<objc2::runtime::NSObject> =
-            objc2::msg_send![cls, mainAppService];
+        let service: Retained<NSObject> = msg_send![cls, mainAppService];
 
-        let mut err_ptr: *mut objc2::runtime::NSObject = std::ptr::null_mut();
+        let mut err_ptr: *mut NSObject = std::ptr::null_mut();
         let ok: bool = if enabled {
-            objc2::msg_send![&*service, registerAndReturnError: &mut err_ptr]
+            msg_send![&*service, registerAndReturnError: &mut err_ptr]
         } else {
-            objc2::msg_send![&*service, unregisterAndReturnError: &mut err_ptr]
+            msg_send![&*service, unregisterAndReturnError: &mut err_ptr]
         };
 
         if ok {
@@ -94,8 +94,7 @@ pub fn set_launch_at_login(enabled: bool) -> Result<(), String> {
             let description = if err_ptr.is_null() {
                 "unknown error".to_string()
             } else {
-                let desc: objc2::rc::Retained<objc2_foundation::NSString> =
-                    objc2::msg_send![&*err_ptr, localizedDescription];
+                let desc: Retained<NSString> = msg_send![&*err_ptr, localizedDescription];
                 desc.to_string()
             };
             Err(description)
