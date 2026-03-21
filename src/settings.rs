@@ -16,6 +16,26 @@ thread_local! {
     static SETTINGS_WINDOW: RefCell<Option<Retained<NSWindow>>> = const { RefCell::new(None) };
 }
 
+// Clear callback registered by main.rs; invoked from both the Settings dialog
+// and the tray "Clear History" menu item.
+thread_local! {
+    static CLEAR_FN: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+}
+
+/// Register the clear-history callback. Called once at startup by `main.rs`.
+pub fn set_clear_fn(f: impl Fn() + 'static) {
+    CLEAR_FN.with(|cell| *cell.borrow_mut() = Some(Box::new(f)));
+}
+
+/// Invoke the clear-history callback if one is registered.
+pub fn invoke_clear_fn() {
+    CLEAR_FN.with(|cell| {
+        if let Some(f) = cell.borrow().as_ref() {
+            f();
+        }
+    });
+}
+
 // Target for the "Settings..." tray menu item
 define_class!(
     #[unsafe(super(NSObject))]
@@ -406,12 +426,10 @@ fn show_settings(mtm: MainThreadMarker) {
 
     // Read and apply settings after dialog closes
     let new_verbose = checkbox.state() == NSControlStateValueOn;
-    let new_history = history_field
-        .integerValue()
-        .clamp(
-            cliphop::config::MIN_MAX_HISTORY as isize,
-            cliphop::config::MAX_MAX_HISTORY as isize,
-        ) as usize;
+    let new_history = history_field.integerValue().clamp(
+        cliphop::config::MIN_MAX_HISTORY as isize,
+        cliphop::config::MAX_MAX_HISTORY as isize,
+    ) as usize;
 
     cliphop::log::set_verbose(new_verbose);
     cliphop::clipboard::set_max_history(new_history);

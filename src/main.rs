@@ -7,6 +7,7 @@ mod tray;
 
 use cliphop::clipboard::{self, ClipboardHistory};
 use cliphop::config;
+use cliphop::history::{self, HistoryEntry};
 use cliphop::log;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use objc2_app_kit::NSWorkspace;
@@ -56,11 +57,37 @@ fn main() {
     let hotkey = hotkey::Hotkey::new();
     log::log("Hotkey registered (Option+V)");
 
+    // Load persisted history into memory
+    let loaded = history::load();
     let mut history = ClipboardHistory::new();
-    log::log("ClipboardHistory initialized");
+    let persisted_texts: Vec<String> = loaded
+        .into_iter()
+        .filter_map(|e| match e {
+            HistoryEntry::Text(s) => Some(s),
+        })
+        .collect();
+    history.load_items(persisted_texts);
+    log::log(&format!(
+        "Loaded {} items from history",
+        history.items().len()
+    ));
 
     let tray = tray::Tray::new(mtm);
     log::log("Tray created");
+
+    // Register clear callback (called from both Settings dialog and tray menu).
+    // Safety: closure is only ever invoked on the main thread (ObjC callback).
+    {
+        let history_ptr = &mut history as *mut ClipboardHistory;
+        let tray_ptr = &tray as *const tray::Tray;
+        settings::set_clear_fn(move || unsafe {
+            (*history_ptr).clear();
+            history::clear();
+            // Rebuild tray immediately to show "No items yet"
+            (*tray_ptr).update_items(&[]);
+            log::log("History cleared");
+        });
+    }
 
     let hotkey_rx = GlobalHotKeyEvent::receiver();
 
@@ -74,7 +101,13 @@ fn main() {
                 update_tray(&tray, &history);
             }
             Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
-                if history.poll().is_some() {
+                let prev_len = history.items().len();
+                let changed = history.poll();
+                let should_save = changed.is_some() || history.items().len() < prev_len;
+
+                if should_save {
+                    let items: Vec<String> = history.items().iter().cloned().collect();
+                    history::save_all(&items);
                     log::log_verbose(&format!(
                         "Clipboard changed, history now has {} items",
                         history.items().len()
