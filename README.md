@@ -57,12 +57,25 @@ Cliphop needs **Accessibility** access to simulate Cmd+V for pasting. macOS prom
 
 ## Roadmap
 
-- [ ] Pin entries
-- [ ] Configurable stack size
-- [ ] Clear stack
+### v0.2 — Reliable Core
+- [ ] History persistence across restarts
+- [ ] Launch at login (toggle in Settings)
+- [ ] Clear history
+
+### v0.3 — Better UX
 - [ ] Configurable hotkey
-- [ ] Self update
-- [ ] Folder support - group entries into named folders
+- [ ] Search/filter in popup menu
+- [ ] Pin entries (snippets that never expire)
+
+### v0.4 — Rich Content
+- [ ] Image & file clipboard support
+- [ ] Paste as plain text (strip formatting)
+- [ ] Paste transformations (uppercase, lowercase, trim)
+
+### v0.5 — Power User
+- [ ] Folder/group support
+- [ ] Self-update mechanism
+- [ ] iCloud sync
 
 ## Development
 
