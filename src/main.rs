@@ -77,20 +77,6 @@ fn main() {
     let tray = tray::Tray::new(mtm);
     log::log("Tray created");
 
-    // Register clear callback (called from both Settings dialog and tray menu).
-    // Safety: closure is only ever invoked on the main thread (ObjC callback).
-    {
-        let history_ptr = &mut history as *mut ClipboardHistory;
-        let tray_ptr = &tray as *const tray::Tray;
-        settings::set_clear_fn(move || unsafe {
-            (*history_ptr).clear();
-            history::clear();
-            // Rebuild tray immediately to show "No items yet"
-            (*tray_ptr).update_items(&[]);
-            log::log("History cleared");
-        });
-    }
-
     let hotkey_rx = GlobalHotKeyEvent::receiver();
 
     log::log("Entering event loop");
@@ -99,6 +85,22 @@ fn main() {
 
         match event {
             Event::NewEvents(StartCause::Init) => {
+                // Register clear callback here: history and tray are now captured by the
+                // event loop closure and live at a stable heap address for the program's
+                // lifetime. Taking raw pointers here (rather than before the move) avoids
+                // dangling-pointer UB.
+                // Safety: clear fn is only ever invoked on the main thread (ObjC callback),
+                // never concurrently with the event loop.
+                {
+                    let history_ptr = &mut history as *mut ClipboardHistory;
+                    let tray_ptr = &tray as *const tray::Tray;
+                    settings::set_clear_fn(move || unsafe {
+                        (*history_ptr).clear();
+                        history::clear();
+                        (*tray_ptr).update_items(&[]);
+                        log::log("History cleared");
+                    });
+                }
                 let _ = history.poll(); // discard on init; tray rebuilt unconditionally below
                 update_tray(&tray, &history);
             }
