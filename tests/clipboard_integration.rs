@@ -30,7 +30,7 @@ fn poll_detects_new_clipboard_content() {
     let mut history = ClipboardHistory::new();
     write_to_clipboard("test_poll_1");
 
-    assert!(history.poll(), "poll() should return true for new content");
+    assert!(history.poll().is_some(), "poll() should return true for new content");
     assert_eq!(history.items().len(), 1);
     assert_eq!(history.items()[0], "test_poll_1");
 }
@@ -41,7 +41,7 @@ fn poll_returns_false_when_no_change() {
     write_to_clipboard("test_no_change");
     history.poll();
 
-    assert!(!history.poll(), "poll() should return false when unchanged");
+    assert!(history.poll().is_none(), "poll() should return false when unchanged");
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn poll_ignores_empty_clipboard() {
     pasteboard.setString_forType(&ns_text, ns_string!("public.utf8-plain-text"));
 
     assert!(
-        !history.poll(),
+        history.poll().is_none(),
         "poll() should return false for empty string"
     );
     assert_eq!(history.items().len(), 0);
@@ -140,7 +140,7 @@ fn select_does_not_trigger_duplicate_on_next_poll() {
     history.select(1); // writes "no_dup_A" to clipboard
 
     assert!(
-        !history.poll(),
+        history.poll().is_none(),
         "poll() after select() should not detect a change"
     );
     assert_eq!(history.items().len(), 2);
@@ -155,20 +155,20 @@ fn e2e_copy_paste_flow() {
 
     // 1. Copy "item A" → poll → verify
     write_to_clipboard("item A");
-    assert!(history.poll());
+    assert!(history.poll().is_some());
     assert_eq!(history.items().len(), 1);
     assert_eq!(history.items()[0], "item A");
 
     // 2. Copy "item B" → poll → verify ordering
     write_to_clipboard("item B");
-    assert!(history.poll());
+    assert!(history.poll().is_some());
     assert_eq!(history.items().len(), 2);
     assert_eq!(history.items()[0], "item B");
     assert_eq!(history.items()[1], "item A");
 
     // 3. Re-copy "item A" → poll → verify deduplication
     write_to_clipboard("item A");
-    assert!(history.poll());
+    assert!(history.poll().is_some());
     assert_eq!(history.items().len(), 2);
     assert_eq!(history.items()[0], "item A");
     assert_eq!(history.items()[1], "item B");
@@ -192,5 +192,5 @@ fn e2e_copy_paste_flow() {
     assert_eq!(read_from_clipboard(), Some("fill_9".to_string()));
 
     // 7. Verify poll() does not re-detect the select-write
-    assert!(!history.poll());
+    assert!(history.poll().is_none());
 }

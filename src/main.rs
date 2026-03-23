@@ -7,6 +7,7 @@ mod tray;
 
 use cliphop::clipboard::{self, ClipboardHistory};
 use cliphop::config;
+use cliphop::history::{self, HistoryEntry};
 use cliphop::log;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use objc2_app_kit::NSWorkspace;
@@ -56,8 +57,22 @@ fn main() {
     let hotkey = hotkey::Hotkey::new();
     log::log("Hotkey registered (Option+V)");
 
+    // Load persisted history into memory
+    let loaded = history::load();
     let mut history = ClipboardHistory::new();
-    log::log("ClipboardHistory initialized");
+    // filter_map intentional: future variants (Image, File) will not be text-pasteable.
+    #[allow(clippy::unnecessary_filter_map)]
+    let persisted_texts: Vec<String> = loaded
+        .into_iter()
+        .filter_map(|e| match e {
+            HistoryEntry::Text(s) => Some(s),
+        })
+        .collect();
+    history.load_items(persisted_texts);
+    log::log(&format!(
+        "Loaded {} items from history",
+        history.items().len()
+    ));
 
     let tray = tray::Tray::new(mtm);
     log::log("Tray created");
@@ -70,11 +85,33 @@ fn main() {
 
         match event {
             Event::NewEvents(StartCause::Init) => {
-                history.poll();
+                // Register clear callback here: history and tray are now captured by the
+                // event loop closure and live at a stable heap address for the program's
+                // lifetime. Taking raw pointers here (rather than before the move) avoids
+                // dangling-pointer UB.
+                // Safety: clear fn is only ever invoked on the main thread (ObjC callback),
+                // never concurrently with the event loop.
+                {
+                    let history_ptr = &mut history as *mut ClipboardHistory;
+                    let tray_ptr = &tray as *const tray::Tray;
+                    settings::set_clear_fn(move || unsafe {
+                        (*history_ptr).clear();
+                        history::clear();
+                        (*tray_ptr).update_items(&[]);
+                        log::log("History cleared");
+                    });
+                }
+                let _ = history.poll(); // discard on init; tray rebuilt unconditionally below
                 update_tray(&tray, &history);
             }
             Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
-                if history.poll() {
+                let prev_len = history.items().len();
+                let changed = history.poll();
+                let should_save = changed.is_some() || history.items().len() < prev_len;
+
+                if should_save {
+                    let items: Vec<String> = history.items().iter().cloned().collect();
+                    history::save_all(&items);
                     log::log_verbose(&format!(
                         "Clipboard changed, history now has {} items",
                         history.items().len()
