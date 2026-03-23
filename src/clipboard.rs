@@ -45,8 +45,9 @@ impl ClipboardHistory {
         }
     }
 
-    /// Polls the clipboard for changes. Returns true if a new item was added.
-    pub fn poll(&mut self) -> bool {
+    /// Polls the clipboard for changes. Returns `Some(new_text)` if a new item
+    /// was added to the front (after deduplication); `None` otherwise.
+    pub fn poll(&mut self) -> Option<String> {
         if TRIM_REQUESTED.swap(false, Ordering::Relaxed) {
             self.trim_to_limit();
         }
@@ -55,19 +56,18 @@ impl ClipboardHistory {
         let count = pasteboard.changeCount();
 
         if count == self.last_change_count {
-            return false;
+            return None;
         }
         self.last_change_count = count;
 
         let text = pasteboard.stringForType(ns_string!("public.utf8-plain-text"));
-
         let text = match text {
             Some(ns_str) => ns_str.to_string(),
-            None => return false,
+            None => return None,
         };
 
         if text.is_empty() {
-            return false;
+            return None;
         }
 
         // Deduplicate: remove existing copy and move to front
@@ -75,13 +75,13 @@ impl ClipboardHistory {
             self.items.remove(pos);
         }
 
-        self.items.push_front(text);
+        self.items.push_front(text.clone());
 
         if self.items.len() > MAX_HISTORY.load(Ordering::Relaxed) {
             self.items.pop_back();
         }
 
-        true
+        Some(text)
     }
 
     pub fn items(&self) -> &VecDeque<String> {
@@ -108,6 +108,23 @@ impl ClipboardHistory {
         ));
 
         Some(text)
+    }
+
+    /// Seeds the in-memory history from persisted entries (called once at startup).
+    /// Applies MAX_HISTORY cap. Sets last_change_count to current pasteboard value
+    /// so the next poll() does not re-detect already-persisted items as new.
+    pub fn load_items(&mut self, items: Vec<String>) {
+        let limit = MAX_HISTORY.load(Ordering::Relaxed);
+        self.items = items.into_iter().take(limit).collect();
+        // Re-read the current pasteboard change count so poll() doesn't
+        // treat the existing clipboard content as a new item.
+        let pasteboard = NSPasteboard::generalPasteboard();
+        self.last_change_count = pasteboard.changeCount();
+    }
+
+    /// Clears the in-memory history.
+    pub fn clear(&mut self) {
+        self.items.clear();
     }
 
     fn trim_to_limit(&mut self) {
@@ -229,5 +246,44 @@ mod tests {
             ClipboardHistory::display_label("hello\tworld there"),
             "hello\tworld there"
         );
+    }
+
+    // ── New v0.2 tests ───────────────────────────────────────────
+
+    #[test]
+    fn clear_empties_items() {
+        let mut h = ClipboardHistory {
+            items: VecDeque::from(["a".to_string(), "b".to_string()]),
+            last_change_count: 0,
+        };
+        h.clear();
+        assert!(h.items().is_empty());
+    }
+
+    #[test]
+    fn load_items_seeds_ring() {
+        let mut h = ClipboardHistory {
+            items: VecDeque::new(),
+            last_change_count: 0,
+        };
+        let items = vec!["x".to_string(), "y".to_string()];
+        h.load_items(items.clone());
+        let loaded: Vec<String> = h.items().iter().cloned().collect();
+        assert_eq!(loaded, items);
+    }
+
+    #[test]
+    fn load_items_caps_at_max_history() {
+        let mut h = ClipboardHistory {
+            items: VecDeque::new(),
+            last_change_count: 0,
+        };
+        // temporarily lower the max to 2
+        let original = get_max_history();
+        set_max_history(2);
+        let items: Vec<String> = (0..5).map(|i| i.to_string()).collect();
+        h.load_items(items);
+        assert_eq!(h.items().len(), 2, "should cap at MAX_HISTORY");
+        set_max_history(original);
     }
 }

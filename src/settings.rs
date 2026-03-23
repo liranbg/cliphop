@@ -16,6 +16,44 @@ thread_local! {
     static SETTINGS_WINDOW: RefCell<Option<Retained<NSWindow>>> = const { RefCell::new(None) };
 }
 
+// Clear callback registered by main.rs; invoked from both the Settings dialog
+// and the tray "Clear History" menu item.
+thread_local! {
+    static CLEAR_FN: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+}
+
+/// Register the clear-history callback. Called once at startup by `main.rs`.
+pub fn set_clear_fn(f: impl Fn() + 'static) {
+    CLEAR_FN.with(|cell| *cell.borrow_mut() = Some(Box::new(f)));
+}
+
+fn invoke_clear_fn() {
+    CLEAR_FN.with(|cell| {
+        if let Some(f) = cell.borrow().as_ref() {
+            f();
+        }
+    });
+}
+
+/// Shows a confirmation alert and invokes the clear callback on confirm.
+/// Returns true if the user confirmed.
+pub fn confirm_and_clear_history(mtm: MainThreadMarker) -> bool {
+    let alert = NSAlert::new(mtm);
+    alert.setMessageText(&NSString::from_str("Clear History"));
+    alert.setInformativeText(&NSString::from_str(
+        "Clear all clipboard history? This cannot be undone.",
+    ));
+    alert.addButtonWithTitle(&NSString::from_str("Clear"));
+    alert.addButtonWithTitle(&NSString::from_str("Cancel"));
+    // NSAlertFirstButtonReturn = 1000
+    if alert.runModal() == 1000 {
+        invoke_clear_fn();
+        true
+    } else {
+        false
+    }
+}
+
 // Target for the "Settings..." tray menu item
 define_class!(
     #[unsafe(super(NSObject))]
@@ -135,9 +173,30 @@ impl AccessibilityTimerTarget {
     }
 }
 
+// Target for the "Clear History" button inside the settings dialog.
+define_class!(
+    #[unsafe(super(NSObject))]
+    #[name = "ClearButtonTarget"]
+    struct ClearButtonTarget;
+
+    impl ClearButtonTarget {
+        #[unsafe(method(clearClicked:))]
+        fn clear_clicked(&self, _sender: &NSObject) {
+            let mtm = unsafe { MainThreadMarker::new_unchecked() };
+            confirm_and_clear_history(mtm);
+        }
+    }
+);
+
+impl ClearButtonTarget {
+    fn new() -> Retained<Self> {
+        unsafe { msg_send![Self::alloc(), init] }
+    }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
-const W: f64 = 300.0;
+const W: f64 = 340.0;
 
 fn make_header(text: &str, y: f64, mtm: MainThreadMarker) -> Retained<NSTextField> {
     let label = NSTextField::labelWithString(&NSString::from_str(text), mtm);
@@ -221,23 +280,25 @@ fn show_settings(mtm: MainThreadMarker) {
 
     // ── Accessory view ───────────────────────────────────────────────
     // Layout (y=0 at bottom, increasing upward):
-    //   157: Accessibility header
-    //   136: Accessibility status label / 132: Request Access button
-    //   124: Separator (Accessibility / History)
-    //    97: History header
-    //    72: History row (label + text field + stepper + range hint)
-    //    64: Separator (History / Logging)
-    //    42: Logging header
-    //    20: Verbose logging checkbox
-    //     0: Log file path
-    let h: f64 = 178.0;
+    //   240: Accessibility header
+    //   218: Accessibility status / 215: Request Access button
+    //   194: Launch at login checkbox
+    //   184: Separator (Accessibility / History)
+    //   164: History header
+    //   142: Items retained row
+    //   120: Clear all history label + Clear… button
+    //   108: Separator (History / Logging)
+    //    88: Logging header
+    //    66: Verbose logging checkbox
+    //    44: Log file path (x=20, "Log file: " prefix)
+    let h: f64 = 260.0;
     let container = NSView::initWithFrame(
         mtm.alloc(),
         NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(W, h)),
     );
 
-    // Section: Accessibility (shifted +60 from original positions)
-    let ax_header = make_header("Accessibility", 157.0, mtm);
+    // Section: Accessibility
+    let ax_header = make_header("Accessibility", 240.0, mtm);
     container.addSubview(&ax_header);
 
     let trusted = crate::macos::is_accessibility_trusted();
@@ -249,11 +310,11 @@ fn show_settings(mtm: MainThreadMarker) {
         } else {
             "\u{26A0}\u{FE0F} Not Granted"
         },
-        136.0,
+        218.0,
         mtm,
     );
     ax_status.setFrame(NSRect::new(
-        NSPoint::new(0.0, 136.0),
+        NSPoint::new(0.0, 218.0),
         NSSize::new(120.0, 18.0),
     ));
     if !trusted {
@@ -274,42 +335,60 @@ fn show_settings(mtm: MainThreadMarker) {
         )
     };
     open_button.setFrame(NSRect::new(
-        NSPoint::new(120.0, 132.0),
+        NSPoint::new(120.0, 215.0),
         NSSize::new(175.0, 26.0),
     ));
     open_button.setHidden(trusted);
     container.addSubview(&open_button);
 
+    // Launch at login checkbox
+    let login_enabled = crate::macos::launch_at_login_status();
+    let login_checkbox = unsafe {
+        NSButton::checkboxWithTitle_target_action(
+            &NSString::from_str("Launch at login"),
+            None,
+            None,
+            mtm,
+        )
+    };
+    login_checkbox.setFrame(NSRect::new(NSPoint::new(0.0, 194.0), NSSize::new(W, 20.0)));
+    login_checkbox.setState(if login_enabled {
+        NSControlStateValueOn
+    } else {
+        NSControlStateValueOff
+    });
+    container.addSubview(&login_checkbox);
+
     // Separator (Accessibility / History)
-    let sep1 = make_separator(124.0, mtm);
+    let sep1 = make_separator(184.0, mtm);
     container.addSubview(&sep1);
 
     // Section: History
-    let history_header = make_header("History", 97.0, mtm);
+    let history_header = make_header("History", 164.0, mtm);
     container.addSubview(&history_header);
 
-    // History row: "Items:" label + editable text field + stepper + range hint
-    let items_label = NSTextField::labelWithString(&NSString::from_str("Items:"), mtm);
+    // History row: "Items retained" label + editable text field + stepper + range hint
+    let items_label = NSTextField::labelWithString(&NSString::from_str("Items retained"), mtm);
     items_label.setFrame(NSRect::new(
-        NSPoint::new(0.0, 72.0),
-        NSSize::new(50.0, 22.0),
+        NSPoint::new(0.0, 142.0),
+        NSSize::new(110.0, 22.0),
     ));
     container.addSubview(&items_label);
 
     let current_limit = cliphop::clipboard::get_max_history() as isize;
 
-    // y=74 (vs label at y=72): 2px upward nudge to optically center the text field
-    // against the taller "Items:" label.
+    // y=144 (vs label at y=142): 2px upward nudge to optically center the text field
+    // against the taller "Items retained" label.
     let history_field = NSTextField::initWithFrame(
         mtm.alloc(),
-        NSRect::new(NSPoint::new(54.0, 74.0), NSSize::new(44.0, 19.0)),
+        NSRect::new(NSPoint::new(114.0, 144.0), NSSize::new(44.0, 19.0)),
     );
     history_field.setIntegerValue(current_limit);
     container.addSubview(&history_field);
 
     let stepper = NSStepper::initWithFrame(
         mtm.alloc(),
-        NSRect::new(NSPoint::new(100.0, 72.0), NSSize::new(19.0, 22.0)),
+        NSRect::new(NSPoint::new(160.0, 142.0), NSSize::new(19.0, 22.0)),
     );
     unsafe {
         stepper.setMinValue(cliphop::config::MIN_MAX_HISTORY as f64);
@@ -337,7 +416,7 @@ fn show_settings(mtm: MainThreadMarker) {
         mtm,
     );
     range_hint.setFrame(NSRect::new(
-        NSPoint::new(124.0, 72.0),
+        NSPoint::new(184.0, 142.0),
         NSSize::new(80.0, 22.0),
     ));
     range_hint.setTextColor(Some(&NSColor::secondaryLabelColor()));
@@ -345,12 +424,35 @@ fn show_settings(mtm: MainThreadMarker) {
     range_hint.setFont(Some(&small_font));
     container.addSubview(&range_hint);
 
+    // Clear History: left label + right button
+    let clear_btn_target = ClearButtonTarget::new();
+    let clear_label = NSTextField::labelWithString(&NSString::from_str("Clear all history"), mtm);
+    clear_label.setFrame(NSRect::new(
+        NSPoint::new(0.0, 120.0),
+        NSSize::new(W - 140.0, 22.0),
+    ));
+    clear_label.setTextColor(Some(&NSColor::systemRedColor()));
+    container.addSubview(&clear_label);
+    let clear_button = unsafe {
+        NSButton::buttonWithTitle_target_action(
+            &NSString::from_str("Clear\u{2026}"),
+            Some(&clear_btn_target),
+            Some(objc2::sel!(clearClicked:)),
+            mtm,
+        )
+    };
+    clear_button.setFrame(NSRect::new(
+        NSPoint::new(W - 130.0, 120.0),
+        NSSize::new(130.0, 28.0),
+    ));
+    container.addSubview(&clear_button);
+
     // Separator (History / Logging)
-    let sep2 = make_separator(64.0, mtm);
+    let sep2 = make_separator(108.0, mtm);
     container.addSubview(&sep2);
 
     // Section: Logging
-    let log_header = make_header("Logging", 42.0, mtm);
+    let log_header = make_header("Logging", 88.0, mtm);
     container.addSubview(&log_header);
 
     let checkbox = unsafe {
@@ -361,7 +463,7 @@ fn show_settings(mtm: MainThreadMarker) {
             mtm,
         )
     };
-    checkbox.setFrame(NSRect::new(NSPoint::new(0.0, 20.0), NSSize::new(W, 20.0)));
+    checkbox.setFrame(NSRect::new(NSPoint::new(0.0, 66.0), NSSize::new(W, 20.0)));
     let current_state = if cliphop::log::is_verbose() {
         NSControlStateValueOn
     } else {
@@ -370,7 +472,14 @@ fn show_settings(mtm: MainThreadMarker) {
     checkbox.setState(current_state);
     container.addSubview(&checkbox);
 
-    let path_label = make_label(&cliphop::log::log_path(), 0.0, mtm);
+    let path_label = NSTextField::labelWithString(
+        &NSString::from_str(&format!("Log file: {}", cliphop::log::log_path())),
+        mtm,
+    );
+    path_label.setFrame(NSRect::new(
+        NSPoint::new(20.0, 44.0),
+        NSSize::new(W - 20.0, 18.0),
+    ));
     path_label.setTextColor(Some(&NSColor::secondaryLabelColor()));
     let small = NSFont::systemFontOfSize(NSFont::smallSystemFontSize());
     path_label.setFont(Some(&small));
@@ -406,12 +515,10 @@ fn show_settings(mtm: MainThreadMarker) {
 
     // Read and apply settings after dialog closes
     let new_verbose = checkbox.state() == NSControlStateValueOn;
-    let new_history = history_field
-        .integerValue()
-        .clamp(
-            cliphop::config::MIN_MAX_HISTORY as isize,
-            cliphop::config::MAX_MAX_HISTORY as isize,
-        ) as usize;
+    let new_history = history_field.integerValue().clamp(
+        cliphop::config::MIN_MAX_HISTORY as isize,
+        cliphop::config::MAX_MAX_HISTORY as isize,
+    ) as usize;
 
     cliphop::log::set_verbose(new_verbose);
     cliphop::clipboard::set_max_history(new_history);
@@ -426,5 +533,13 @@ fn show_settings(mtm: MainThreadMarker) {
         cliphop::log::log("Verbose logging enabled");
     } else {
         cliphop::log::log("Verbose logging disabled");
+    }
+
+    // Apply launch-at-login change if toggled
+    let new_login = login_checkbox.state() == NSControlStateValueOn;
+    if new_login != login_enabled
+        && let Err(e) = crate::macos::set_launch_at_login(new_login)
+    {
+        cliphop::log::log(&format!("set_launch_at_login failed: {}", e));
     }
 }
