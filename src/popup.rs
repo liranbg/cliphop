@@ -6,8 +6,8 @@ use objc2::rc::Retained;
 use objc2::runtime::NSObject;
 use objc2::{AnyThread, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationOptions, NSBackingStoreType, NSEvent, NSEventMask,
-    NSFloatingWindowLevel, NSFont, NSMenu, NSMenuItem, NSPanel, NSTextField, NSView,
+    NSApplication, NSApplicationActivationOptions, NSBackingStoreType, NSControl, NSEvent,
+    NSEventMask, NSFloatingWindowLevel, NSFont, NSMenu, NSMenuItem, NSPanel, NSTextField, NSView,
     NSWindowStyleMask, NSWorkspace,
 };
 use objc2_foundation::{
@@ -33,7 +33,7 @@ thread_local! {
 // ── PopupRowView — one row in the history or pinned list ─────────────────────
 
 define_class!(
-    #[unsafe(super(NSView))]
+    #[unsafe(super(NSControl))]
     #[name = "PopupRowView"]
     pub struct PopupRowView;
 
@@ -272,14 +272,18 @@ pub fn show_popup(
         // Empty state
         let empty = NSTextField::labelWithString(ns_string!("No clipboard history yet"), mtm);
         empty.setFrame(NSRect::new(NSPoint::new(0.0, row_y), NSSize::new(W, ROW_H)));
-        unsafe { let _: () = msg_send![&*empty, setAlignment: 1_isize]; } // NSTextAlignmentCenter
+        unsafe {
+            let _: () = msg_send![&*empty, setAlignment: 1_isize];
+        } // NSTextAlignmentCenter
         content.addSubview(&empty);
     } else {
         for (idx, label, tooltip) in items {
             let row_frame = NSRect::new(NSPoint::new(0.0, row_y), NSSize::new(W, ROW_H));
             let row: Retained<PopupRowView> =
                 unsafe { msg_send![mtm.alloc::<PopupRowView>(), initWithFrame: row_frame] };
-            unsafe { let _: () = msg_send![&*row, setTag: *idx as isize]; }
+            unsafe {
+                let _: () = msg_send![&*row, setTag: *idx as isize];
+            }
             row.setToolTip(Some(&NSString::from_str(tooltip)));
 
             let label_view = NSTextField::labelWithString(&NSString::from_str(label), mtm);
@@ -321,7 +325,9 @@ pub fn show_popup(
                 let row_frame = NSRect::new(NSPoint::new(0.0, row_y), NSSize::new(W, ROW_H));
                 let row: Retained<PopupRowView> =
                     unsafe { msg_send![mtm.alloc::<PopupRowView>(), initWithFrame: row_frame] };
-                unsafe { let _: () = msg_send![&*row, setTag: ((1_isize << 16) | *idx as isize)]; }
+                unsafe {
+                    let _: () = msg_send![&*row, setTag: ((1_isize << 16) | *idx as isize)];
+                }
                 row.setToolTip(Some(&NSString::from_str(tooltip)));
 
                 let pin_label = NSTextField::labelWithString(
