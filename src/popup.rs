@@ -6,9 +6,9 @@ use objc2::rc::Retained;
 use objc2::runtime::NSObject;
 use objc2::{AnyThread, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationOptions, NSBackingStoreType, NSColor, NSEvent,
-    NSEventMask, NSFloatingWindowLevel, NSFont, NSMenu, NSMenuItem, NSPanel, NSRunningApplication,
-    NSTextField, NSView, NSWindow, NSWindowStyleMask, NSWorkspace,
+    NSApplication, NSApplicationActivationOptions, NSBackingStoreType, NSEvent,
+    NSEventMask, NSFloatingWindowLevel, NSFont, NSMenu, NSMenuItem, NSPanel,
+    NSTextField, NSView, NSWindowStyleMask, NSWorkspace,
 };
 use objc2_foundation::{
     MainThreadMarker, NSDate, NSPoint, NSRect, NSRunLoop, NSSize, NSString, ns_string,

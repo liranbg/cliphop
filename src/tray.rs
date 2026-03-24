@@ -1,7 +1,7 @@
 use objc2::rc::Retained;
 use objc2::runtime::NSObject;
 use objc2::{AnyThread, define_class, msg_send, sel};
-use objc2_app_kit::{NSImage, NSMenu, NSMenuItem, NSStatusBar, NSStatusItem, NSWorkspace};
+use objc2_app_kit::{NSImage, NSMenu, NSMenuItem, NSStatusBar, NSStatusItem};
 use objc2_foundation::{MainThreadMarker, NSString, ns_string};
 
 use crate::settings::{self, SettingsTarget};

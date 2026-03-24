@@ -117,6 +117,48 @@ pub fn format_combo(modifiers: Option<Modifiers>, code: Code) -> String {
     parts.join("+")
 }
 
+/// Converts a raw NSEventModifierFlags bitmask and a key character (from
+/// `NSEvent.charactersIgnoringModifiers`) into a canonical combo string.
+/// Returns Err if the key cannot be mapped.
+pub fn combo_from_event_flags(modifier_bits: u64, chars_ignoring_mods: &str) -> Result<String, String> {
+    // NSEventModifierFlags bit values (from AppKit headers)
+    const CMD:   u64 = 1 << 20; // NSEventModifierFlagCommand
+    const SHIFT: u64 = 1 << 17; // NSEventModifierFlagShift
+    const OPT:   u64 = 1 << 19; // NSEventModifierFlagOption (Alt)
+    const CTRL:  u64 = 1 << 18; // NSEventModifierFlagControl
+
+    let key_char = chars_ignoring_mods.to_lowercase();
+    let code = str_to_code(key_char.trim())?;
+
+    let mut mods = Modifiers::empty();
+    if modifier_bits & CMD   != 0 { mods |= Modifiers::META; }
+    if modifier_bits & CTRL  != 0 { mods |= Modifiers::CONTROL; }
+    if modifier_bits & OPT   != 0 { mods |= Modifiers::ALT; }
+    if modifier_bits & SHIFT != 0 { mods |= Modifiers::SHIFT; }
+
+    if mods.is_empty() {
+        return Err("combo must include at least one modifier key".to_string());
+    }
+
+    Ok(format_combo(Some(mods), code))
+}
+
+/// Returns a display string for a hotkey combo config (e.g. "alt+v" → "⌥V").
+pub fn display_combo(combo: &str) -> String {
+    let Ok((mods, code)) = parse_combo(combo) else {
+        return combo.to_string();
+    };
+    let mut s = String::new();
+    if let Some(m) = mods {
+        if m.contains(Modifiers::META)    { s.push('⌘'); }
+        if m.contains(Modifiers::CONTROL) { s.push('⌃'); }
+        if m.contains(Modifiers::ALT)     { s.push('⌥'); }
+        if m.contains(Modifiers::SHIFT)   { s.push('⇧'); }
+    }
+    s.push_str(&code_to_str(code).to_uppercase());
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

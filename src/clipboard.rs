@@ -166,6 +166,27 @@ impl ClipboardHistory {
         self.pinned = items.into_iter().collect();
     }
 
+    /// Writes pinned[idx] to the clipboard and returns the text. No-op if out of range.
+    pub fn select_pinned(&mut self, idx: usize) -> Option<String> {
+        let text = self.pinned.get(idx)?.clone();
+        let pasteboard = NSPasteboard::generalPasteboard();
+        pasteboard.clearContents();
+        let ns_text = NSString::from_str(&text);
+        pasteboard.setString_forType(&ns_text, ns_string!("public.utf8-plain-text"));
+        self.last_change_count = pasteboard.changeCount();
+        Some(text)
+    }
+
+    /// Removes history[idx]. No-op if out of range.
+    pub fn delete_history(&mut self, idx: usize) {
+        self.items.remove(idx);
+    }
+
+    /// Removes pinned[idx]. No-op if out of range.
+    pub fn delete_pinned(&mut self, idx: usize) {
+        self.pinned.remove(idx);
+    }
+
     fn trim_to_limit(&mut self) {
         let limit = MAX_HISTORY.load(Ordering::Relaxed);
         while self.items.len() > limit {
