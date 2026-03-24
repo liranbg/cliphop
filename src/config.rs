@@ -7,6 +7,7 @@ pub const MAX_MAX_HISTORY: usize = 50;
 pub struct Config {
     pub verbose_logging: bool,
     pub max_history: usize,
+    pub hotkey: String,
 }
 
 impl Default for Config {
@@ -14,6 +15,7 @@ impl Default for Config {
         Self {
             verbose_logging: false,
             max_history: DEFAULT_MAX_HISTORY,
+            hotkey: "alt+v".to_string(),
         }
     }
 }
@@ -57,6 +59,9 @@ fn parse(contents: &str) -> Config {
                     cfg.max_history = n.clamp(MIN_MAX_HISTORY, MAX_MAX_HISTORY);
                 }
             }
+            "hotkey" => {
+                cfg.hotkey = value.trim().to_string();
+            }
             _ => {}
         }
     }
@@ -74,8 +79,8 @@ pub fn save(config: &Config) {
     let path = config_path();
     let tmp = format!("{}.tmp", path);
     let contents = format!(
-        "verbose_logging={}\nmax_history={}\n",
-        config.verbose_logging, config.max_history
+        "verbose_logging={}\nmax_history={}\nhotkey={}\n",
+        config.verbose_logging, config.max_history, config.hotkey
     );
     if let Err(e) = fs::write(&tmp, &contents) {
         crate::log::log(&format!("config.save: failed to write {}: {}", tmp, e));
@@ -161,6 +166,28 @@ mod tests {
         let cfg = load_from(&path);
         assert!(cfg.verbose_logging);
         assert_eq!(cfg.max_history, 42);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn default_hotkey_is_alt_v() {
+        let cfg = Config::default();
+        assert_eq!(cfg.hotkey, "alt+v");
+    }
+
+    #[test]
+    fn parse_hotkey_field() {
+        let cfg = parse("hotkey=ctrl+shift+v\n");
+        assert_eq!(cfg.hotkey, "ctrl+shift+v");
+    }
+
+    #[test]
+    fn save_and_load_hotkey() {
+        let path = tmp_path("cliphop_test_hotkey_config");
+        let contents = "verbose_logging=false\nmax_history=10\nhotkey=meta+k\n";
+        fs::write(&path, contents).unwrap();
+        let loaded = load_from(&path);
+        assert_eq!(loaded.hotkey, "meta+k");
         let _ = fs::remove_file(&path);
     }
 }
