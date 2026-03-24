@@ -2,6 +2,7 @@ use base64::{Engine, engine::general_purpose::STANDARD as B64};
 
 pub enum HistoryEntry {
     Text(String),
+    PinnedText(String),
 }
 
 fn history_path() -> String {
@@ -26,9 +27,9 @@ pub fn load() -> Vec<HistoryEntry> {
 }
 
 /// Production API: saves all items to ~/.cliphop/history using Keychain key.
-pub fn save_all(items: &[String]) {
+pub fn save_all(history: &[String], pinned: &[String]) {
     match crate::crypto::get_or_create_key() {
-        Ok(key) => save_all_to(&history_path(), key, items),
+        Ok(key) => save_all_to(&history_path(), key, history, pinned),
         Err(e) => crate::log::log(&format!("history.save_all: Keychain error: {:?}", e)),
     }
 }
@@ -71,13 +72,18 @@ pub fn load_from(path: &str, key: [u8; 32]) -> Vec<HistoryEntry> {
 
     for entry in entries_json.iter().take(MAX_ENTRIES) {
         let kind = entry["kind"].as_str().unwrap_or("");
-        if kind != "text" {
-            crate::log::log_verbose(&format!(
-                "history.load_from: skipping unknown kind '{}'",
-                kind
-            ));
-            continue;
-        }
+
+        let is_pinned = match kind {
+            "text" => false,
+            "pinned_text" => true,
+            _ => {
+                crate::log::log_verbose(&format!(
+                    "history.load_from: skipping unknown kind '{}'",
+                    kind
+                ));
+                continue;
+            }
+        };
 
         let nonce_b64 = match entry["n"].as_str() {
             Some(s) => s,
@@ -117,7 +123,11 @@ pub fn load_from(path: &str, key: [u8; 32]) -> Vec<HistoryEntry> {
         match crate::crypto::decrypt(&key, &nonce_bytes, &ciphertext) {
             Ok(plaintext) => {
                 if let Ok(text) = String::from_utf8(plaintext) {
-                    results.push(HistoryEntry::Text(text));
+                    if is_pinned {
+                        results.push(HistoryEntry::PinnedText(text));
+                    } else {
+                        results.push(HistoryEntry::Text(text));
+                    }
                 } else {
                     failed += 1;
                 }
@@ -143,7 +153,7 @@ pub fn load_from(path: &str, key: [u8; 32]) -> Vec<HistoryEntry> {
     results
 }
 
-pub fn save_all_to(path: &str, key: [u8; 32], items: &[String]) {
+pub fn save_all_to(path: &str, key: [u8; 32], history: &[String], pinned: &[String]) {
     let dir = cliphop_dir_for(path);
     if let Err(e) = std::fs::create_dir_all(&dir) {
         crate::log::log(&format!("history.save_all_to: mkdir failed: {}", e));
@@ -151,12 +161,29 @@ pub fn save_all_to(path: &str, key: [u8; 32], items: &[String]) {
     }
 
     let mut arr = Vec::new();
-    for item in items {
+
+    for item in history {
         match crate::crypto::encrypt(&key, item.as_bytes()) {
             Ok((nonce, ciphertext)) => {
                 arr.push(serde_json::json!({
                     "v": 1,
                     "kind": "text",
+                    "n": B64.encode(nonce),
+                    "d": B64.encode(&ciphertext),
+                }));
+            }
+            Err(e) => {
+                crate::log::log(&format!("history.save_all_to: encrypt error: {:?}", e));
+            }
+        }
+    }
+
+    for item in pinned {
+        match crate::crypto::encrypt(&key, item.as_bytes()) {
+            Ok((nonce, ciphertext)) => {
+                arr.push(serde_json::json!({
+                    "v": 1,
+                    "kind": "pinned_text",
                     "n": B64.encode(nonce),
                     "d": B64.encode(&ciphertext),
                 }));
@@ -223,7 +250,7 @@ mod tests {
         let path = tmp_path("cliphop_hist_test_round_trip");
         let _ = fs::remove_file(&path);
         let key = test_key();
-        save_all_to(&path, key, &["hello world".to_string()]);
+        save_all_to(&path, key, &["hello world".to_string()], &[]);
         let entries = load_from(&path, key);
         assert_eq!(entries.len(), 1);
         assert!(matches!(&entries[0], HistoryEntry::Text(s) if s == "hello world"));
@@ -240,12 +267,13 @@ mod tests {
             "second".to_string(),
             "third".to_string(),
         ];
-        save_all_to(&path, key, &items);
+        save_all_to(&path, key, &items, &[]);
         let entries = load_from(&path, key);
         let texts: Vec<String> = entries
             .into_iter()
             .filter_map(|e| match e {
                 HistoryEntry::Text(s) => Some(s),
+                HistoryEntry::PinnedText(_) => None,
             })
             .collect();
         assert_eq!(texts, items);
@@ -266,7 +294,7 @@ mod tests {
         let _ = fs::remove_file(&path);
         let write_key = [1u8; 32];
         let read_key = [2u8; 32];
-        save_all_to(&path, write_key, &["secret".to_string()]);
+        save_all_to(&path, write_key, &["secret".to_string()], &[]);
         let entries = load_from(&path, read_key);
         assert!(entries.is_empty(), "wrong key must return empty, not panic");
         let _ = fs::remove_file(&path);
@@ -276,7 +304,7 @@ mod tests {
     fn clear_removes_file() {
         let path = tmp_path("cliphop_hist_test_clear");
         let key = test_key();
-        save_all_to(&path, key, &["item".to_string()]);
+        save_all_to(&path, key, &["item".to_string()], &[]);
         assert!(
             fs::metadata(&path).is_ok(),
             "file should exist before clear"
@@ -294,7 +322,7 @@ mod tests {
         let path = tmp_path("cliphop_hist_test_corrupt");
         let _ = fs::remove_file(&path);
         let key = test_key();
-        save_all_to(&path, key, &["good1".to_string(), "good2".to_string()]);
+        save_all_to(&path, key, &["good1".to_string(), "good2".to_string()], &[]);
         // Inject a corrupt entry into the JSON
         let contents = fs::read_to_string(&path).unwrap();
         let mut arr: serde_json::Value = serde_json::from_str(&contents).unwrap();
@@ -308,6 +336,49 @@ mod tests {
         let entries = load_from(&path, key);
         // 2 good entries load; corrupt one is skipped
         assert_eq!(entries.len(), 2);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn pinned_text_round_trip() {
+        let path = tmp_path("cliphop_hist_test_pinned_rt");
+        let _ = fs::remove_file(&path);
+        let key = test_key();
+        save_all_to(&path, key, &["regular".to_string()], &["pinned".to_string()]);
+        let entries = load_from(&path, key);
+        assert_eq!(entries.len(), 2);
+        assert!(matches!(&entries[0], HistoryEntry::Text(s) if s == "regular"));
+        assert!(matches!(&entries[1], HistoryEntry::PinnedText(s) if s == "pinned"));
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn pinned_text_survives_reload_with_old_kind_skipped() {
+        let path = tmp_path("cliphop_hist_test_pinned_unknown");
+        let _ = fs::remove_file(&path);
+        let key = test_key();
+        save_all_to(&path, key, &[], &["pinned_item".to_string()]);
+        let contents = fs::read_to_string(&path).unwrap();
+        let mut arr: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        arr.as_array_mut().unwrap().push(serde_json::json!({
+            "v": 1, "kind": "future_kind", "n": "AAAAAAAAAA==", "d": "AAAA"
+        }));
+        fs::write(&path, serde_json::to_string(&arr).unwrap()).unwrap();
+        let entries = load_from(&path, key);
+        assert_eq!(entries.len(), 1);
+        assert!(matches!(&entries[0], HistoryEntry::PinnedText(s) if s == "pinned_item"));
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn empty_pinned_list_round_trips() {
+        let path = tmp_path("cliphop_hist_test_empty_pinned");
+        let _ = fs::remove_file(&path);
+        let key = test_key();
+        save_all_to(&path, key, &["only_history".to_string()], &[]);
+        let entries = load_from(&path, key);
+        assert_eq!(entries.len(), 1);
+        assert!(matches!(&entries[0], HistoryEntry::Text(_)));
         let _ = fs::remove_file(&path);
     }
 }
