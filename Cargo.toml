@@ -7,6 +7,7 @@ edition = "2024"
 tao = "0.34"
 global-hotkey = "0.7"
 objc2 = "0.6"
+block2 = "0.6"
 objc2-foundation = { version = "0.3", features = [
     "NSString",
     "NSGeometry",
@@ -14,6 +15,11 @@ objc2-foundation = { version = "0.3", features = [
     "NSDictionary",
     "NSAppleEventDescriptor",
     "NSURL",
+    "NSNotification",
+    "NSRunLoop",
+    "NSDate",
+    "NSArray",
+    "NSTimer",
 ] }
 objc2-app-kit = { version = "0.3", features = [
     "NSAlert",
@@ -38,7 +44,10 @@ objc2-app-kit = { version = "0.3", features = [
     "NSStepper",
     "NSView",
     "NSWindow",
+    "NSPanel",
     "NSWorkspace",
+    "NSColor",
+    "NSScreen",
     "libc",
 ] }
 core-graphics = { version = "0.25", features = ["elcapitan"] }

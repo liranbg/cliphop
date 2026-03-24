@@ -159,8 +159,8 @@ fn main() {
                     .unwrap_or(-1);
 
                 log::log_verbose(&format!("Showing popup with {} items", items.len()));
-                match popup::show_popup(&items, mtm) {
-                    Some(index) => {
+                match popup::show_popup(&items, &[], mtm) {
+                    Some(popup::PopupAction::Paste { pinned: false, index }) => {
                         log::log_verbose(&format!("Popup returned: index={}", index));
                         match history.select(index) {
                             Some(..) => {
@@ -176,8 +176,8 @@ fn main() {
                             }
                         }
                     }
-                    None => {
-                        log::log_verbose("Popup dismissed without selection");
+                    Some(_) | None => {
+                        log::log_verbose("Popup dismissed without paste selection");
                     }
                 }
             }

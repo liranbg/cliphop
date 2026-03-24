@@ -159,6 +159,7 @@ version = "0.2.0"
 dependencies = [
  "aes-gcm",
  "base64",
+ "block2",
  "core-graphics",
  "global-hotkey",
  "keyring",
