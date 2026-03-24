@@ -61,14 +61,16 @@ fn main() {
     let loaded = history::load();
     let mut history = ClipboardHistory::new();
     // filter_map intentional: future variants (Image, File) will not be text-pasteable.
-    #[allow(clippy::unnecessary_filter_map)]
-    let persisted_texts: Vec<String> = loaded
-        .into_iter()
-        .filter_map(|e| match e {
-            HistoryEntry::Text(s) => Some(s),
-        })
-        .collect();
+    let mut persisted_texts: Vec<String> = Vec::new();
+    let mut persisted_pinned: Vec<String> = Vec::new();
+    for e in loaded {
+        match e {
+            HistoryEntry::Text(s) => persisted_texts.push(s),
+            HistoryEntry::PinnedText(s) => persisted_pinned.push(s),
+        }
+    }
     history.load_items(persisted_texts);
+    history.load_pinned(persisted_pinned);
     log::log(&format!(
         "Loaded {} items from history",
         history.items().len()
@@ -111,7 +113,7 @@ fn main() {
 
                 if should_save {
                     let items: Vec<String> = history.items().iter().cloned().collect();
-                    history::save_all(&items);
+                    history::save_all(&items, &[]);
                     log::log_verbose(&format!(
                         "Clipboard changed, history now has {} items",
                         history.items().len()

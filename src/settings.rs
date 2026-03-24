@@ -524,9 +524,11 @@ fn show_settings(mtm: MainThreadMarker) {
     cliphop::clipboard::set_max_history(new_history);
     cliphop::clipboard::request_trim();
 
+    let current_config = cliphop::config::load();
     cliphop::config::save(&cliphop::config::Config {
         verbose_logging: new_verbose,
         max_history: new_history,
+        hotkey: current_config.hotkey,
     });
 
     if new_verbose {
