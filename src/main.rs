@@ -30,7 +30,7 @@ fn update_tray(tray: &tray::Tray, history: &ClipboardHistory) {
             )
         })
         .collect();
-    tray.update_items(&items);
+    tray.update_items(&items, &[]);
 }
 
 fn main() {
@@ -99,7 +99,7 @@ fn main() {
                     settings::set_clear_fn(move || unsafe {
                         (*history_ptr).clear();
                         history::clear();
-                        (*tray_ptr).update_items(&[]);
+                        (*tray_ptr).update_items(&[], &[]);
                         log::log("History cleared");
                     });
                 }

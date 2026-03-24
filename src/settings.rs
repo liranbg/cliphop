@@ -27,10 +27,28 @@ pub fn set_clear_fn(f: impl Fn() + 'static) {
     CLEAR_FN.with(|cell| *cell.borrow_mut() = Some(Box::new(f)));
 }
 
-fn invoke_clear_fn() {
+pub(crate) fn invoke_clear_fn() {
     CLEAR_FN.with(|cell| {
         if let Some(f) = cell.borrow().as_ref() {
             f();
+        }
+    });
+}
+
+// Tray paste callback registered by main.rs; invoked when a tray history/pinned
+// item is clicked. tag encodes: pinned flag (bit 16) | index (bits 0-15).
+thread_local! {
+    static TRAY_PASTE_FN: RefCell<Option<Box<dyn Fn(usize)>>> = const { RefCell::new(None) };
+}
+
+pub fn set_tray_paste_fn(f: impl Fn(usize) + 'static) {
+    TRAY_PASTE_FN.with(|cell| *cell.borrow_mut() = Some(Box::new(f)));
+}
+
+pub(crate) fn invoke_tray_paste_fn(tag: usize) {
+    TRAY_PASTE_FN.with(|cell| {
+        if let Some(f) = cell.borrow().as_ref() {
+            f(tag);
         }
     });
 }
