@@ -11,9 +11,7 @@ use objc2_app_kit::{
     NSEventMask, NSFont, NSImage, NSMenuItem, NSRunningApplication, NSStepper, NSTextField, NSView,
     NSWindow, NSWorkspace,
 };
-use objc2_foundation::{
-    MainThreadMarker, NSPoint, NSRect, NSSize, NSString, ns_string,
-};
+use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString, ns_string};
 
 // Holds the settings alert window while the dialog is open, so re-clicking
 // "Settings..." brings it back to front instead of opening a second dialog.
@@ -42,8 +40,9 @@ pub(crate) fn invoke_clear_fn() {
 
 // Tray paste callback registered by main.rs; invoked when a tray history/pinned
 // item is clicked. tag encodes: pinned flag (bit 16) | index (bits 0-15).
+type TrayPasteFn = Box<dyn Fn(usize)>;
 thread_local! {
-    static TRAY_PASTE_FN: RefCell<Option<Box<dyn Fn(usize)>>> = const { RefCell::new(None) };
+    static TRAY_PASTE_FN: RefCell<Option<TrayPasteFn>> = const { RefCell::new(None) };
 }
 
 pub fn set_tray_paste_fn(f: impl Fn(usize) + 'static) {
@@ -59,8 +58,9 @@ pub(crate) fn invoke_tray_paste_fn(tag: usize) {
 }
 
 // Hotkey re-registration callback registered by main.rs
+type ReregisterFn = Box<dyn Fn(&str) -> Result<(), String>>;
 thread_local! {
-    static REREGISTER_FN: RefCell<Option<Box<dyn Fn(&str) -> Result<(), String>>>> =
+    static REREGISTER_FN: RefCell<Option<ReregisterFn>> =
         const { RefCell::new(None) };
     static HOTKEY_BADGE: RefCell<Option<Retained<NSTextField>>> = const { RefCell::new(None) };
     static HOTKEY_RECORD_BTN: RefCell<Option<Retained<NSButton>>> = const { RefCell::new(None) };
@@ -84,7 +84,7 @@ fn invoke_reregister_fn(combo: &str) -> Result<(), String> {
 fn stop_hotkey_recording() {
     HOTKEY_MONITOR.with(|m| {
         if let Some(monitor) = m.borrow_mut().take() {
-            let cls = unsafe { objc2::runtime::AnyClass::get(c"NSEvent").unwrap() };
+            let cls = objc2::runtime::AnyClass::get(c"NSEvent").unwrap();
             let (): () = unsafe { msg_send![cls, removeMonitor: &*monitor] };
         }
     });
@@ -582,7 +582,10 @@ fn show_settings(mtm: MainThreadMarker) {
 
     // Hotkey row: label + badge + Record… button
     let hotkey_label = make_label("Hotkey", 200.0, mtm);
-    hotkey_label.setFrame(NSRect::new(NSPoint::new(0.0, 200.0), NSSize::new(55.0, 22.0)));
+    hotkey_label.setFrame(NSRect::new(
+        NSPoint::new(0.0, 200.0),
+        NSSize::new(55.0, 22.0),
+    ));
     container.addSubview(&hotkey_label);
 
     let current_hotkey = cliphop::config::load().hotkey;
@@ -605,7 +608,10 @@ fn show_settings(mtm: MainThreadMarker) {
             mtm,
         )
     };
-    record_btn.setFrame(NSRect::new(NSPoint::new(148.0, 198.0), NSSize::new(90.0, 26.0)));
+    record_btn.setFrame(NSRect::new(
+        NSPoint::new(148.0, 198.0),
+        NSSize::new(90.0, 26.0),
+    ));
     container.addSubview(&record_btn);
 
     let hint_label = make_label("Click Record, then press your shortcut", 180.0, mtm);

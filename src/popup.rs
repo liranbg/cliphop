@@ -6,9 +6,9 @@ use objc2::rc::Retained;
 use objc2::runtime::NSObject;
 use objc2::{AnyThread, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationOptions, NSBackingStoreType, NSEvent,
-    NSEventMask, NSFloatingWindowLevel, NSFont, NSMenu, NSMenuItem, NSPanel,
-    NSTextField, NSView, NSWindowStyleMask, NSWorkspace,
+    NSApplication, NSApplicationActivationOptions, NSBackingStoreType, NSEvent, NSEventMask,
+    NSFloatingWindowLevel, NSFont, NSMenu, NSMenuItem, NSPanel, NSTextField, NSView,
+    NSWindowStyleMask, NSWorkspace,
 };
 use objc2_foundation::{
     MainThreadMarker, NSDate, NSPoint, NSRect, NSRunLoop, NSSize, NSString, ns_string,
@@ -57,7 +57,7 @@ define_class!(
             let context_target: Retained<PopupContextTarget> =
                 unsafe { msg_send![PopupContextTarget::alloc(), init] };
             let menu = build_context_menu(is_pinned, index, &context_target, mtm);
-            let location = unsafe { NSEvent::mouseLocation() };
+            let location = NSEvent::mouseLocation();
             unsafe {
                 let _: () = msg_send![
                     &*menu,
@@ -229,7 +229,7 @@ pub fn show_popup(
     let content_h = (history_h + pinned_h).max(MIN_H);
     let total_h = SEARCH_H + content_h;
 
-    let location = unsafe { NSEvent::mouseLocation() };
+    let location = NSEvent::mouseLocation();
     let frame = NSRect::new(
         NSPoint::new(location.x, location.y - total_h),
         NSSize::new(W, total_h),
@@ -245,12 +245,14 @@ pub fn show_popup(
             defer: false
         ]
     };
-    unsafe { panel.setLevel(NSFloatingWindowLevel) };
+    panel.setLevel(NSFloatingWindowLevel);
 
     // Attach dismiss delegate
     let delegate: Retained<PopupWindowDelegate> =
         unsafe { msg_send![PopupWindowDelegate::alloc(), init] };
-    unsafe { let (): () = msg_send![&*panel, setDelegate: &*delegate]; }
+    unsafe {
+        let (): () = msg_send![&*panel, setDelegate: &*delegate];
+    }
 
     let content = panel.contentView().unwrap();
 
@@ -261,25 +263,17 @@ pub fn show_popup(
     );
     let search_field = NSTextField::initWithFrame(mtm.alloc(), search_frame);
     search_field.setPlaceholderString(Some(ns_string!("Type to filter...")));
-    unsafe {
-        content.addSubview(&search_field);
-    }
+    content.addSubview(&search_field);
 
     // ── History rows ──────────────────────────────────────────────────
     let mut row_y = total_h - SEARCH_H - ROW_H;
 
     if items.is_empty() && pinned.is_empty() {
         // Empty state
-        let empty =
-            NSTextField::labelWithString(ns_string!("No clipboard history yet"), mtm);
-        empty.setFrame(NSRect::new(
-            NSPoint::new(0.0, row_y),
-            NSSize::new(W, ROW_H),
-        ));
-        unsafe {
-            let _: () = msg_send![&*empty, setAlignment: 1_isize]; // NSTextAlignmentCenter
-            content.addSubview(&empty);
-        }
+        let empty = NSTextField::labelWithString(ns_string!("No clipboard history yet"), mtm);
+        empty.setFrame(NSRect::new(NSPoint::new(0.0, row_y), NSSize::new(W, ROW_H)));
+        unsafe { let _: () = msg_send![&*empty, setAlignment: 1_isize]; } // NSTextAlignmentCenter
+        content.addSubview(&empty);
     } else {
         for (idx, label, tooltip) in items {
             let row_frame = NSRect::new(NSPoint::new(0.0, row_y), NSSize::new(W, ROW_H));
@@ -288,33 +282,29 @@ pub fn show_popup(
             unsafe { let _: () = msg_send![&*row, setTag: *idx as isize]; }
             row.setToolTip(Some(&NSString::from_str(tooltip)));
 
-            let label_view =
-                NSTextField::labelWithString(&NSString::from_str(label), mtm);
+            let label_view = NSTextField::labelWithString(&NSString::from_str(label), mtm);
             label_view.setFrame(NSRect::new(
                 NSPoint::new(8.0, 5.0),
                 NSSize::new(W - 16.0, ROW_H - 10.0),
             ));
-            unsafe {
-                row.addSubview(&label_view);
-                content.addSubview(&row);
-            }
+            row.addSubview(&label_view);
+            content.addSubview(&row);
             row_y -= ROW_H;
         }
 
         // ── Pinned shelf ──────────────────────────────────────────────
         if !pinned.is_empty() {
             // Separator
-            let sep_frame = NSRect::new(
-                NSPoint::new(0.0, row_y + ROW_H),
-                NSSize::new(W, 1.0),
-            );
+            let sep_frame = NSRect::new(NSPoint::new(0.0, row_y + ROW_H), NSSize::new(W, 1.0));
             let sep = NSView::initWithFrame(mtm.alloc(), sep_frame);
-            unsafe { content.addSubview(&sep) };
+            content.addSubview(&sep);
             row_y -= 1.0;
 
             // Header
-            let hdr_frame =
-                NSRect::new(NSPoint::new(0.0, row_y - PIN_HEADER_H), NSSize::new(W, PIN_HEADER_H));
+            let hdr_frame = NSRect::new(
+                NSPoint::new(0.0, row_y - PIN_HEADER_H),
+                NSSize::new(W, PIN_HEADER_H),
+            );
             let hdr_bg = NSView::initWithFrame(mtm.alloc(), hdr_frame);
             let hdr_label = NSTextField::labelWithString(ns_string!("PINNED"), mtm);
             hdr_label.setFrame(NSRect::new(
@@ -323,18 +313,14 @@ pub fn show_popup(
             ));
             let small = NSFont::systemFontOfSize(NSFont::smallSystemFontSize());
             hdr_label.setFont(Some(&small));
-            unsafe {
-                hdr_bg.addSubview(&hdr_label);
-                content.addSubview(&hdr_bg);
-            }
+            hdr_bg.addSubview(&hdr_label);
+            content.addSubview(&hdr_bg);
             row_y -= PIN_HEADER_H;
 
             for (idx, label, tooltip) in pinned {
-                let row_frame =
-                    NSRect::new(NSPoint::new(0.0, row_y), NSSize::new(W, ROW_H));
-                let row: Retained<PopupRowView> = unsafe {
-                    msg_send![mtm.alloc::<PopupRowView>(), initWithFrame: row_frame]
-                };
+                let row_frame = NSRect::new(NSPoint::new(0.0, row_y), NSSize::new(W, ROW_H));
+                let row: Retained<PopupRowView> =
+                    unsafe { msg_send![mtm.alloc::<PopupRowView>(), initWithFrame: row_frame] };
                 unsafe { let _: () = msg_send![&*row, setTag: ((1_isize << 16) | *idx as isize)]; }
                 row.setToolTip(Some(&NSString::from_str(tooltip)));
 
@@ -346,10 +332,8 @@ pub fn show_popup(
                     NSPoint::new(8.0, 5.0),
                     NSSize::new(W - 16.0, ROW_H - 10.0),
                 ));
-                unsafe {
-                    row.addSubview(&pin_label);
-                    content.addSubview(&row);
-                }
+                row.addSubview(&pin_label);
+                content.addSubview(&row);
                 row_y -= ROW_H;
             }
         }
@@ -359,35 +343,36 @@ pub fn show_popup(
     let search_ptr = &*search_field as *const NSTextField as usize; // pass as usize for Send
     let have_items = !items.is_empty();
 
-    let kb_block = StackBlock::new(
-        move |event: NonNull<NSEvent>| -> *mut NSEvent {
-            let key_code = unsafe { event.as_ref().keyCode() };
-            match key_code {
-                53 => {
-                    // Esc
-                    let search_ref = unsafe { &*(search_ptr as *const NSTextField) };
-                    let query = search_ref.stringValue();
-                    if query.len() == 0 {
-                        POPUP_DISMISSED.with(|c| c.set(true));
-                    } else {
-                        search_ref.setStringValue(ns_string!(""));
-                    }
-                    std::ptr::null_mut()
+    let kb_block = StackBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
+        let key_code = unsafe { event.as_ref().keyCode() };
+        match key_code {
+            53 => {
+                // Esc
+                let search_ref = unsafe { &*(search_ptr as *const NSTextField) };
+                let query = search_ref.stringValue();
+                if query.is_empty() {
+                    POPUP_DISMISSED.with(|c| c.set(true));
+                } else {
+                    search_ref.setStringValue(ns_string!(""));
                 }
-                36 | 76 if have_items => {
-                    // Enter — select most-recent history item
-                    if POPUP_ACTION.with(|c| c.get()).is_none() {
-                        POPUP_ACTION.with(|c| {
-                            c.set(Some(PopupAction::Paste { pinned: false, index: 0 }))
-                        });
-                        POPUP_DISMISSED.with(|c| c.set(true));
-                    }
-                    std::ptr::null_mut()
-                }
-                _ => event.as_ptr(),
+                std::ptr::null_mut()
             }
-        },
-    );
+            36 | 76 if have_items => {
+                // Enter — select most-recent history item
+                if POPUP_ACTION.with(|c| c.get()).is_none() {
+                    POPUP_ACTION.with(|c| {
+                        c.set(Some(PopupAction::Paste {
+                            pinned: false,
+                            index: 0,
+                        }))
+                    });
+                    POPUP_DISMISSED.with(|c| c.set(true));
+                }
+                std::ptr::null_mut()
+            }
+            _ => event.as_ptr(),
+        }
+    });
 
     let kb_monitor: Retained<NSObject> = unsafe {
         let cls = objc2::runtime::AnyClass::get(c"NSEvent").unwrap();
@@ -400,16 +385,17 @@ pub fn show_popup(
 
     // ── Show panel and focus search field ─────────────────────────────
     panel.makeKeyAndOrderFront(None);
-    unsafe { let _: () = msg_send![&*panel, makeFirstResponder: &*search_field]; }
+    unsafe {
+        let _: () = msg_send![&*panel, makeFirstResponder: &*search_field];
+    }
 
     // ── Spin nested run loop until dismissed ──────────────────────────
-    let run_loop = unsafe { NSRunLoop::currentRunLoop() };
+    let run_loop = NSRunLoop::currentRunLoop();
     let mode = NSString::from_str("kCFRunLoopDefaultMode");
 
     while !POPUP_DISMISSED.with(|c| c.get()) {
-        let until = unsafe { NSDate::dateWithTimeIntervalSinceNow(0.05) };
-        let _: bool =
-            unsafe { msg_send![&*run_loop, runMode: &*mode, beforeDate: &*until] };
+        let until = NSDate::dateWithTimeIntervalSinceNow(0.05);
+        let _: bool = unsafe { msg_send![&*run_loop, runMode: &*mode, beforeDate: &*until] };
     }
 
     // Remove keyboard monitor
@@ -423,13 +409,11 @@ pub fn show_popup(
     let result = POPUP_ACTION.with(|c| c.get());
 
     // Restore focus to previous app (only for Paste actions)
-    if matches!(result, Some(PopupAction::Paste { .. })) {
-        if let Some(prev) = &frontmost {
-            #[allow(deprecated)]
-            prev.activateWithOptions(
-                NSApplicationActivationOptions::ActivateIgnoringOtherApps,
-            );
-        }
+    if matches!(result, Some(PopupAction::Paste { .. }))
+        && let Some(prev) = &frontmost
+    {
+        #[allow(deprecated)]
+        prev.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
     }
 
     result
