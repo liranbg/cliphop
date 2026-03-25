@@ -43,6 +43,14 @@ cargo test -- --test-threads=1
 ```
 
 ```bash
+# Run visibility smoke test (no Accessibility permission needed)
+./tests/smoke_visibility.sh
+
+# Run usability smoke test (requires Accessibility permission — prompts you to grant it)
+./tests/smoke_usability.sh
+```
+
+```bash
 # Run GUI E2E test (builds app, launches it, drives UI via osascript)
 # Requires: Accessibility permissions for Terminal, macOS only
 ./tests/e2e_gui.sh
