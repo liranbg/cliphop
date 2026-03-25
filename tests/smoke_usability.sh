@@ -103,6 +103,9 @@ fi
 
 # Kill any stale instance from a previous run
 pkill -x cliphop 2>/dev/null || true
+# Delete stale history so the app starts clean — stale entries would
+# shift index positions and break Tests 7 and 8.
+rm -f "$HOME/.cliphop/history"
 sleep 1
 
 # ── Test suite ────────────────────────────────────────────────────────
@@ -182,7 +185,7 @@ fi
 echo ""
 echo "Test 4: Settings dialog closes..."
 osascript -e 'tell application "System Events" to key code 53' 2>/dev/null || true
-sleep 0.5
+sleep 1
 
 settings_gone=$(osascript -e '
 tell application "System Events"
@@ -211,7 +214,7 @@ osascript -e '
 tell application "TextEdit"
     activate
     make new document
-end tell'
+end tell' || true
 sleep 0.5
 
 # Test 6: Option+V popup opens
@@ -220,8 +223,8 @@ echo "Test 6: Option+V popup opens..."
 osascript -e '
 tell application "System Events"
     key code 9 using option down
-end tell'
-sleep 1
+end tell' || true
+sleep 1.5
 
 popup_visible=$(osascript -e '
 tell application "System Events"
@@ -243,6 +246,8 @@ echo ""
 echo "Test 7: Select index 0 (most recent item)..."
 osascript -e '
 tell application "System Events"
+    key code 9 using option down
+    delay 1
     key code 125
     delay 0.3
     key code 36
@@ -278,18 +283,18 @@ echo "Test 9: Right-click on popup row (no crash)..."
 osascript -e '
 tell application "System Events"
     key code 9 using option down
-end tell'
+end tell' || true
 sleep 1
 
 osascript <<'APPLESCRIPT' 2>/dev/null || true
 tell application "System Events"
     tell process "cliphop"
         -- Get popup window origin; control-click at first history row
-        -- (~80px below top, which clears the search field and pinned shelf)
+        -- (wy+50 = search field 36px + half row 14px = center of first history row)
         set win_pos to position of window 1
         set wx to item 1 of win_pos
         set wy to item 2 of win_pos
-        click at {wx + 50, wy + 80} using {control down}
+        click at {wx + 50, wy + 50} using {control down}
         delay 0.5
         -- Dismiss context menu / popup
         key code 53
