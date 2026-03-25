@@ -28,10 +28,9 @@ POLL_WAIT=1  # seconds; app polls every 500ms so 1s is a safe margin
 # ── Helpers ───────────────────────────────────────────────────────────
 
 cleanup() {
-    local pid="${APP_PID:-$(pgrep -x cliphop | head -1 || echo "")}"
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-        kill "$pid"
-        wait "$pid" 2>/dev/null || true
+    if [[ -n "$APP_PID" ]] && kill -0 "$APP_PID" 2>/dev/null; then
+        kill "$APP_PID"
+        wait "$APP_PID" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT
@@ -80,18 +79,11 @@ fi
 # Test 2: App launches and stays alive
 echo ""
 echo "Launching Cliphop..."
-BUNDLE="$SCRIPT_DIR/target/Cliphop.app"
-if [[ -d "$BUNDLE" ]]; then
-    open "$BUNDLE"
-    sleep 2
-    APP_PID=$(pgrep -x cliphop | head -1 || echo "")
-else
-    "$BINARY" &
-    APP_PID=$!
-    sleep 2
-fi
+"$BINARY" &
+APP_PID=$!
+sleep 2
 
-if pgrep -x cliphop > /dev/null 2>&1; then
+if kill -0 "$APP_PID" 2>/dev/null; then
     pass "App launches and stays running"
 else
     echo "SKIP: App exited on startup (requires a macOS desktop session)"
@@ -110,11 +102,11 @@ fi
 # Test 4: App runs as UIElement — no Dock icon (lsappinfo, no permissions needed)
 echo ""
 echo "Testing UIElement status..."
-app_type=$(lsappinfo list 2>/dev/null | grep -i -A6 cliphop | grep 'type=' | head -1 || echo "")
+app_type=$(lsappinfo list 2>/dev/null | grep "pid = $APP_PID " | grep -o 'type="[^"]*"' | head -1 || echo "")
 if echo "$app_type" | grep -qi "UIElement"; then
     pass "App runs as UIElement (no Dock icon)"
 else
-    fail "App is UIElement" "ApplicationType = UIElement" "${app_type:-not found}"
+    fail "App is UIElement" 'type="UIElement"' "${app_type:-not found}"
 fi
 
 # Test 5: Log file created
