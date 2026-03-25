@@ -128,7 +128,7 @@ sleep "$POLL_WAIT"
 echo -n "smoke_test_B" | pbcopy
 sleep "$POLL_WAIT"
 
-if pgrep -x cliphop > /dev/null 2>&1; then
+if kill -0 "$APP_PID" 2>/dev/null; then
     pass "App stays alive during clipboard polling"
 else
     fail "App alive after clipboard polling" "running" "exited"
