@@ -20,7 +20,7 @@ impl Default for Config {
     }
 }
 
-fn cliphop_dir() -> String {
+pub fn cliphop_dir() -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     format!("{}/.cliphop", home)
 }

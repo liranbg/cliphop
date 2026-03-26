@@ -6,13 +6,7 @@ pub enum HistoryEntry {
 }
 
 fn history_path() -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
-    format!("{}/.cliphop/history", home)
-}
-
-fn cliphop_dir() -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
-    format!("{}/.cliphop", home)
+    format!("{}/history", crate::config::cliphop_dir())
 }
 
 /// Production API: loads from ~/.cliphop/history using Keychain key.
@@ -226,7 +220,7 @@ fn cliphop_dir_for(history_path: &str) -> String {
     std::path::Path::new(history_path)
         .parent()
         .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(cliphop_dir)
+        .unwrap_or_else(crate::config::cliphop_dir)
 }
 
 #[cfg(test)]

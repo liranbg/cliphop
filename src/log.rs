@@ -10,7 +10,7 @@ static START: OnceLock<Instant> = OnceLock::new();
 
 pub fn init() {
     START.get_or_init(Instant::now);
-    let dir = format!("{}/.cliphop", std::env::var("HOME").unwrap_or_default());
+    let dir = crate::config::cliphop_dir();
     let _ = fs::create_dir_all(&dir);
     let path = format!("{}/log", dir);
     // Truncate on startup
