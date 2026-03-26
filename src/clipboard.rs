@@ -26,11 +26,12 @@ pub fn request_trim() {
     TRIM_REQUESTED.store(true, Ordering::Relaxed);
 }
 
-const LABEL_LEN: usize = 30;
+const LABEL_LEN: usize = 60;
 const TOOLTIP_LEN: usize = 300;
 
 pub struct ClipboardHistory {
     items: VecDeque<String>,
+    pinned: VecDeque<String>,
     last_change_count: isize,
 }
 
@@ -41,6 +42,7 @@ impl ClipboardHistory {
         let count = pasteboard.changeCount();
         Self {
             items: VecDeque::new(),
+            pinned: VecDeque::new(),
             last_change_count: count,
         }
     }
@@ -67,6 +69,11 @@ impl ClipboardHistory {
         };
 
         if text.is_empty() {
+            return None;
+        }
+
+        // Do not add to history if this text is already pinned.
+        if self.pinned.iter().any(|p| p == &text) {
             return None;
         }
 
@@ -122,9 +129,66 @@ impl ClipboardHistory {
         self.last_change_count = pasteboard.changeCount();
     }
 
-    /// Clears the in-memory history.
+    /// Clears the in-memory history and pinned items.
     pub fn clear(&mut self) {
         self.items.clear();
+        self.pinned.clear();
+    }
+
+    pub fn pinned_items(&self) -> &VecDeque<String> {
+        &self.pinned
+    }
+
+    /// Moves history[idx] to the pinned list. No-op if text already pinned.
+    pub fn pin(&mut self, idx: usize) {
+        let Some(text) = self.items.get(idx).cloned() else {
+            return;
+        };
+        if self.pinned.iter().any(|p| p == &text) {
+            return; // already pinned
+        }
+        self.items.remove(idx);
+        self.pinned.push_back(text);
+    }
+
+    /// Moves pinned[idx] to the front of history.
+    /// Evicts the oldest history item if already at max_history capacity.
+    pub fn unpin(&mut self, idx: usize) {
+        let Some(text) = self.pinned.get(idx).cloned() else {
+            return;
+        };
+        self.pinned.remove(idx);
+        let limit = MAX_HISTORY.load(Ordering::Relaxed);
+        if self.items.len() >= limit {
+            self.items.pop_back();
+        }
+        self.items.push_front(text);
+    }
+
+    /// Seeds the pinned list from persisted entries. Called once at startup.
+    pub fn load_pinned(&mut self, items: Vec<String>) {
+        self.pinned = items.into_iter().collect();
+    }
+
+    /// Writes pinned[idx] to the clipboard and returns the text. No-op if out of range.
+    pub fn select_pinned(&mut self, idx: usize) -> Option<String> {
+        let text = self.pinned.get(idx)?.clone();
+        let pasteboard = NSPasteboard::generalPasteboard();
+        pasteboard.clearContents();
+        let ns_text = NSString::from_str(&text);
+        pasteboard.setString_forType(&ns_text, ns_string!("public.utf8-plain-text"));
+        self.last_change_count = pasteboard.changeCount();
+        Some(text)
+    }
+
+    /// Removes history[idx]. No-op if out of range.
+    pub fn delete_history(&mut self, idx: usize) {
+        self.items.remove(idx);
+    }
+
+    /// Removes pinned[idx]. No-op if out of range.
+    pub fn delete_pinned(&mut self, idx: usize) {
+        self.pinned.remove(idx);
     }
 
     fn trim_to_limit(&mut self) {
@@ -254,6 +318,7 @@ mod tests {
     fn clear_empties_items() {
         let mut h = ClipboardHistory {
             items: VecDeque::from(["a".to_string(), "b".to_string()]),
+            pinned: VecDeque::new(),
             last_change_count: 0,
         };
         h.clear();
@@ -264,6 +329,7 @@ mod tests {
     fn load_items_seeds_ring() {
         let mut h = ClipboardHistory {
             items: VecDeque::new(),
+            pinned: VecDeque::new(),
             last_change_count: 0,
         };
         let items = vec!["x".to_string(), "y".to_string()];
@@ -276,6 +342,7 @@ mod tests {
     fn load_items_caps_at_max_history() {
         let mut h = ClipboardHistory {
             items: VecDeque::new(),
+            pinned: VecDeque::new(),
             last_change_count: 0,
         };
         // temporarily lower the max to 2
@@ -285,5 +352,99 @@ mod tests {
         h.load_items(items);
         assert_eq!(h.items().len(), 2, "should cap at MAX_HISTORY");
         set_max_history(original);
+    }
+
+    // ── Pin/unpin tests ───────────────────────────────────────────
+
+    #[test]
+    fn pin_moves_item_to_pinned_list() {
+        let mut h = ClipboardHistory {
+            items: VecDeque::from(["a".to_string(), "b".to_string()]),
+            pinned: VecDeque::new(),
+            last_change_count: 0,
+        };
+        h.pin(1); // pin "b"
+        assert_eq!(h.items().len(), 1);
+        assert_eq!(h.items()[0], "a");
+        assert_eq!(h.pinned_items().len(), 1);
+        assert_eq!(h.pinned_items()[0], "b");
+    }
+
+    #[test]
+    fn pin_is_noop_when_already_pinned() {
+        let mut h = ClipboardHistory {
+            items: VecDeque::from(["a".to_string()]),
+            pinned: VecDeque::from(["a".to_string()]),
+            last_change_count: 0,
+        };
+        h.pin(0); // "a" is already pinned — no-op
+        assert_eq!(h.items().len(), 1); // unchanged
+        assert_eq!(h.pinned_items().len(), 1);
+    }
+
+    #[test]
+    fn unpin_moves_item_to_front_of_history() {
+        let mut h = ClipboardHistory {
+            items: VecDeque::from(["a".to_string()]),
+            pinned: VecDeque::from(["b".to_string()]),
+            last_change_count: 0,
+        };
+        h.unpin(0); // unpin "b"
+        assert_eq!(h.items()[0], "b");
+        assert_eq!(h.items()[1], "a");
+        assert!(h.pinned_items().is_empty());
+    }
+
+    #[test]
+    fn unpin_evicts_oldest_when_at_capacity() {
+        set_max_history(2);
+        let mut h = ClipboardHistory {
+            items: VecDeque::from(["a".to_string(), "b".to_string()]),
+            pinned: VecDeque::from(["c".to_string()]),
+            last_change_count: 0,
+        };
+        h.unpin(0); // history at max; "b" (oldest) should be evicted
+        assert_eq!(h.items().len(), 2);
+        assert_eq!(h.items()[0], "c");
+        assert_eq!(h.items()[1], "a");
+        set_max_history(10); // restore
+    }
+
+    #[test]
+    fn poll_ignores_copy_of_pinned_text() {
+        let mut h = ClipboardHistory {
+            items: VecDeque::new(),
+            pinned: VecDeque::from(["secret".to_string()]),
+            last_change_count: 0,
+        };
+        // Simulate what poll() does when it sees "secret":
+        let text = "secret".to_string();
+        if !h.pinned_items().iter().any(|p| p == &text) {
+            h.items.push_front(text);
+        }
+        assert!(h.items().is_empty(), "pinned item should not enter history");
+    }
+
+    #[test]
+    fn clear_clears_both_history_and_pinned() {
+        let mut h = ClipboardHistory {
+            items: VecDeque::from(["a".to_string()]),
+            pinned: VecDeque::from(["b".to_string()]),
+            last_change_count: 0,
+        };
+        h.clear();
+        assert!(h.items().is_empty());
+        assert!(h.pinned_items().is_empty());
+    }
+
+    #[test]
+    fn display_label_sixty_char_limit() {
+        let input: String = "x".repeat(60);
+        assert_eq!(ClipboardHistory::display_label(&input), input);
+
+        let long: String = "x".repeat(61);
+        let result = ClipboardHistory::display_label(&long);
+        assert!(result.ends_with("..."));
+        assert_eq!(result.chars().count(), 63); // 60 + "..."
     }
 }

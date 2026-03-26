@@ -11,7 +11,7 @@ use cliphop::history::{self, HistoryEntry};
 use cliphop::log;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use objc2_app_kit::NSWorkspace;
-use objc2_foundation::MainThreadMarker;
+use objc2_foundation::{MainThreadMarker, NSPoint};
 use std::time::{Duration, Instant};
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoop};
@@ -30,7 +30,24 @@ fn update_tray(tray: &tray::Tray, history: &ClipboardHistory) {
             )
         })
         .collect();
-    tray.update_items(&items);
+    let pinned: Vec<(String, String)> = history
+        .pinned_items()
+        .iter()
+        .enumerate()
+        .map(|(i, text)| {
+            (
+                format!("{}: {}", i, ClipboardHistory::display_label(text)),
+                ClipboardHistory::display_tooltip(text),
+            )
+        })
+        .collect();
+    tray.update_items(&items, &pinned);
+}
+
+fn save_history(history: &ClipboardHistory) {
+    let items: Vec<String> = history.items().iter().cloned().collect();
+    let pinned: Vec<String> = history.pinned_items().iter().cloned().collect();
+    history::save_all(&items, &pinned);
 }
 
 fn main() {
@@ -54,24 +71,35 @@ fn main() {
     // Safety: tao's EventLoop::new() initializes NSApplication on the main thread.
     let mtm = unsafe { MainThreadMarker::new_unchecked() };
 
-    let hotkey = hotkey::Hotkey::new();
-    log::log("Hotkey registered (Option+V)");
+    let mut hotkey = hotkey::Hotkey::new();
+    // Apply saved hotkey combo (may differ from the default "alt+v")
+    if cfg.hotkey != "alt+v"
+        && let Err(e) = hotkey.re_register(&cfg.hotkey)
+    {
+        log::log(&format!(
+            "Failed to apply saved hotkey '{}': {}",
+            cfg.hotkey, e
+        ));
+    }
+    log::log(&format!("Hotkey registered ({})", cfg.hotkey));
 
     // Load persisted history into memory
     let loaded = history::load();
     let mut history = ClipboardHistory::new();
-    // filter_map intentional: future variants (Image, File) will not be text-pasteable.
-    #[allow(clippy::unnecessary_filter_map)]
-    let persisted_texts: Vec<String> = loaded
-        .into_iter()
-        .filter_map(|e| match e {
-            HistoryEntry::Text(s) => Some(s),
-        })
-        .collect();
+    let mut persisted_texts: Vec<String> = Vec::new();
+    let mut persisted_pinned: Vec<String> = Vec::new();
+    for e in loaded {
+        match e {
+            HistoryEntry::Text(s) => persisted_texts.push(s),
+            HistoryEntry::PinnedText(s) => persisted_pinned.push(s),
+        }
+    }
     history.load_items(persisted_texts);
+    history.load_pinned(persisted_pinned);
     log::log(&format!(
-        "Loaded {} items from history",
-        history.items().len()
+        "Loaded {} history + {} pinned items",
+        history.items().len(),
+        history.pinned_items().len(),
     ));
 
     let tray = tray::Tray::new(mtm);
@@ -85,23 +113,53 @@ fn main() {
 
         match event {
             Event::NewEvents(StartCause::Init) => {
-                // Register clear callback here: history and tray are now captured by the
-                // event loop closure and live at a stable heap address for the program's
-                // lifetime. Taking raw pointers here (rather than before the move) avoids
-                // dangling-pointer UB.
-                // Safety: clear fn is only ever invoked on the main thread (ObjC callback),
-                // never concurrently with the event loop.
                 {
                     let history_ptr = &mut history as *mut ClipboardHistory;
                     let tray_ptr = &tray as *const tray::Tray;
                     settings::set_clear_fn(move || unsafe {
                         (*history_ptr).clear();
                         history::clear();
-                        (*tray_ptr).update_items(&[]);
+                        (*tray_ptr).update_items(&[], &[]);
                         log::log("History cleared");
                     });
                 }
-                let _ = history.poll(); // discard on init; tray rebuilt unconditionally below
+                {
+                    // Tray item click: tag encodes pinned flag (bit 16) | index (bits 0-15)
+                    let history_ptr = &mut history as *mut ClipboardHistory;
+                    let tray_ptr = &tray as *const tray::Tray;
+                    settings::set_tray_paste_fn(move |tag| {
+                        let is_pinned = (tag >> 16) & 1 == 1;
+                        let idx = tag & 0xFFFF;
+                        let target_pid = NSWorkspace::sharedWorkspace()
+                            .frontmostApplication()
+                            .map(|a| a.processIdentifier())
+                            .unwrap_or(-1);
+                        let selected = unsafe {
+                            if is_pinned {
+                                (*history_ptr).select_pinned(idx)
+                            } else {
+                                (*history_ptr).select(idx)
+                            }
+                        };
+                        if selected.is_some() {
+                            paste::simulate_paste(target_pid);
+                            save_history(unsafe { &*history_ptr });
+                            update_tray(unsafe { &*tray_ptr }, unsafe { &*history_ptr });
+                        }
+                    });
+                }
+                {
+                    settings::set_reregister_fn(move |combo: &str| {
+                        // We can't hold a mutable ref to hotkey inside the closure here
+                        // (the hotkey is owned by this closure scope) — instead we re-register
+                        // via a separate channel. hotkey re_register is called from the settings
+                        // ObjC callback, which runs on the main thread in the same run-loop tick.
+                        // We use a thread-local to communicate the new combo back.
+                        PENDING_HOTKEY.with(|p| *p.borrow_mut() = Some(combo.to_string()));
+                        Ok(())
+                    });
+                }
+                let _ = history.poll();
                 update_tray(&tray, &history);
             }
             Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
@@ -110,8 +168,7 @@ fn main() {
                 let should_save = changed.is_some() || history.items().len() < prev_len;
 
                 if should_save {
-                    let items: Vec<String> = history.items().iter().cloned().collect();
-                    history::save_all(&items);
+                    save_history(&history);
                     log::log_verbose(&format!(
                         "Clipboard changed, history now has {} items",
                         history.items().len()
@@ -122,63 +179,158 @@ fn main() {
             _ => {}
         }
 
+        // Apply pending hotkey re-registration (set by settings callback)
+        PENDING_HOTKEY.with(|p| {
+            if let Some(combo) = p.borrow_mut().take() {
+                if let Err(e) = hotkey.re_register(&combo) {
+                    log::log(&format!("hotkey re-register failed: {}", e));
+                } else {
+                    log::log(&format!("Hotkey re-registered: {}", combo));
+                }
+            }
+        });
+
         // Check for hotkey press
         if let Ok(event) = hotkey_rx.try_recv()
             && event.id == hotkey.hotkey.id()
             && event.state == HotKeyState::Pressed
         {
             log::log_verbose(&format!(
-                "Hotkey pressed, {} items in history",
-                history.items().len()
+                "Hotkey pressed, {} items in history, {} pinned",
+                history.items().len(),
+                history.pinned_items().len(),
             ));
 
-            // Build the list of items for the popup: (index, label, tooltip)
-            let items: Vec<(usize, String, String)> = history
-                .items()
-                .iter()
-                .enumerate()
-                .map(|(i, text)| {
-                    (
-                        i,
-                        ClipboardHistory::display_label(text),
-                        ClipboardHistory::display_tooltip(text),
-                    )
-                })
-                .collect();
-
-            if items.is_empty() {
+            if history.items().is_empty() && history.pinned_items().is_empty() {
                 log::log("No items to show, skipping popup");
             } else {
-                // Capture the frontmost app before the popup grabs focus,
-                // so simulate_paste knows which app to wait for.
                 let target_pid = NSWorkspace::sharedWorkspace()
                     .frontmostApplication()
                     .map(|a| a.processIdentifier())
                     .unwrap_or(-1);
 
-                log::log_verbose(&format!("Showing popup with {} items", items.len()));
-                match popup::show_popup(&items, mtm) {
-                    Some(index) => {
-                        log::log_verbose(&format!("Popup returned: index={}", index));
-                        match history.select(index) {
-                            Some(..) => {
-                                log::log_verbose(&format!("Clipboard set to item {}", index));
-                                log::log_verbose("Calling simulate_paste()");
+                // The popup stays open for mutating actions (pin, unpin, delete).
+                // Each iteration rebuilds items/pinned and re-shows the popup at
+                // the same position.  Only Paste and dismiss (None) exit the loop.
+                let mut popup_pos: Option<NSPoint> = None;
+                loop {
+                    let items: Vec<(usize, String, String)> = history
+                        .items()
+                        .iter()
+                        .enumerate()
+                        .map(|(i, text)| {
+                            (
+                                i,
+                                ClipboardHistory::display_label(text),
+                                ClipboardHistory::display_tooltip(text),
+                            )
+                        })
+                        .collect();
+
+                    let pinned: Vec<(usize, String, String)> = history
+                        .pinned_items()
+                        .iter()
+                        .enumerate()
+                        .map(|(i, text)| {
+                            (
+                                i,
+                                ClipboardHistory::display_label(text),
+                                ClipboardHistory::display_tooltip(text),
+                            )
+                        })
+                        .collect();
+
+                    if items.is_empty() && pinned.is_empty() {
+                        log::log("All items removed, closing popup");
+                        break;
+                    }
+
+                    log::log(&format!(
+                        "Showing popup: {} history, {} pinned",
+                        items.len(),
+                        pinned.len()
+                    ));
+                    let (action, pos) =
+                        popup::show_popup(&items, &pinned, mtm, popup_pos);
+                    popup_pos = Some(pos);
+
+                    match action {
+                        Some(popup::PopupAction::Paste {
+                            pinned: false,
+                            index,
+                        }) => {
+                            log::log(&format!("Popup: paste history[{}]", index));
+                            if history.select(index).is_some() {
+                                paste::simulate_paste(target_pid);
+                                save_history(&history);
+                                update_tray(&tray, &history);
+                            }
+                            break;
+                        }
+                        Some(popup::PopupAction::Paste {
+                            pinned: true,
+                            index,
+                        }) => {
+                            log::log_verbose(&format!(
+                                "Popup: paste pinned[{}]",
+                                index
+                            ));
+                            if history.select_pinned(index).is_some() {
                                 paste::simulate_paste(target_pid);
                             }
-                            None => {
-                                log::log(&format!(
-                                    "ERROR: history.select({}) returned None",
-                                    index
-                                ));
-                            }
+                            break;
                         }
-                    }
-                    None => {
-                        log::log_verbose("Popup dismissed without selection");
+                        Some(popup::PopupAction::Pin { history_index }) => {
+                            log::log_verbose(&format!(
+                                "Popup: pin history[{}]",
+                                history_index
+                            ));
+                            history.pin(history_index);
+                            save_history(&history);
+                            update_tray(&tray, &history);
+                            // Loop: reopen popup with updated content
+                        }
+                        Some(popup::PopupAction::Unpin { pinned_index }) => {
+                            log::log_verbose(&format!(
+                                "Popup: unpin pinned[{}]",
+                                pinned_index
+                            ));
+                            history.unpin(pinned_index);
+                            save_history(&history);
+                            update_tray(&tray, &history);
+                        }
+                        Some(popup::PopupAction::DeleteHistory { index }) => {
+                            log::log_verbose(&format!(
+                                "Popup: delete history[{}]",
+                                index
+                            ));
+                            history.delete_history(index);
+                            save_history(&history);
+                            update_tray(&tray, &history);
+                        }
+                        Some(popup::PopupAction::DeletePinned { index }) => {
+                            log::log_verbose(&format!(
+                                "Popup: delete pinned[{}]",
+                                index
+                            ));
+                            history.delete_pinned(index);
+                            save_history(&history);
+                            update_tray(&tray, &history);
+                        }
+                        None => {
+                            log::log("Popup dismissed without action");
+                            break;
+                        }
                     }
                 }
             }
         }
     });
+}
+
+// Thread-local to pass hotkey combo from settings callback back to the event loop
+// (avoids needing a mut ref to hotkey inside a closure).
+use std::cell::RefCell;
+thread_local! {
+    static PENDING_HOTKEY: RefCell<Option<String>> = const { RefCell::new(None) };
 }

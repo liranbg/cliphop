@@ -13,3 +13,6 @@
 
 # Git worktrees
 .worktrees/
+
+# superpowers claude plugins
+.superpowers/
