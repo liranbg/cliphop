@@ -341,6 +341,27 @@ fn ctx_decode(tag: isize) -> (isize, usize) {
     (kind, index)
 }
 
+fn add_context_item(
+    menu: &NSMenu,
+    title: &str,
+    tag: isize,
+    delegate: &ContextMenuDelegate,
+    mtm: MainThreadMarker,
+) {
+    let item = unsafe {
+        NSMenuItem::initWithTitle_action_keyEquivalent(
+            mtm.alloc(),
+            &NSString::from_str(title),
+            Some(sel!(contextAction:)),
+            ns_string!(""),
+        )
+    };
+    item.setTag(tag);
+    item.setEnabled(true);
+    unsafe { item.setTarget(Some(delegate)) };
+    menu.addItem(&item);
+}
+
 fn build_context_menu(
     is_pinned: bool,
     index: usize,
@@ -351,57 +372,11 @@ fn build_context_menu(
     menu.setAutoenablesItems(false);
 
     if is_pinned {
-        let unpin = unsafe {
-            NSMenuItem::initWithTitle_action_keyEquivalent(
-                mtm.alloc(),
-                &NSString::from_str("Unpin"),
-                Some(sel!(contextAction:)),
-                ns_string!(""),
-            )
-        };
-        unpin.setTag(ctx_tag(CTX_UNPIN, index));
-        unpin.setEnabled(true);
-        unsafe { unpin.setTarget(Some(delegate)) };
-        menu.addItem(&unpin);
-
-        let delete = unsafe {
-            NSMenuItem::initWithTitle_action_keyEquivalent(
-                mtm.alloc(),
-                &NSString::from_str("Delete"),
-                Some(sel!(contextAction:)),
-                ns_string!(""),
-            )
-        };
-        delete.setTag(ctx_tag(CTX_DEL_PINNED, index));
-        delete.setEnabled(true);
-        unsafe { delete.setTarget(Some(delegate)) };
-        menu.addItem(&delete);
+        add_context_item(&menu, "Unpin", ctx_tag(CTX_UNPIN, index), delegate, mtm);
+        add_context_item(&menu, "Delete", ctx_tag(CTX_DEL_PINNED, index), delegate, mtm);
     } else {
-        let pin = unsafe {
-            NSMenuItem::initWithTitle_action_keyEquivalent(
-                mtm.alloc(),
-                &NSString::from_str("Pin"),
-                Some(sel!(contextAction:)),
-                ns_string!(""),
-            )
-        };
-        pin.setTag(ctx_tag(CTX_PIN, index));
-        pin.setEnabled(true);
-        unsafe { pin.setTarget(Some(delegate)) };
-        menu.addItem(&pin);
-
-        let delete = unsafe {
-            NSMenuItem::initWithTitle_action_keyEquivalent(
-                mtm.alloc(),
-                &NSString::from_str("Delete from history"),
-                Some(sel!(contextAction:)),
-                ns_string!(""),
-            )
-        };
-        delete.setTag(ctx_tag(CTX_DEL_HISTORY, index));
-        delete.setEnabled(true);
-        unsafe { delete.setTarget(Some(delegate)) };
-        menu.addItem(&delete);
+        add_context_item(&menu, "Pin", ctx_tag(CTX_PIN, index), delegate, mtm);
+        add_context_item(&menu, "Delete from history", ctx_tag(CTX_DEL_HISTORY, index), delegate, mtm);
     }
 
     menu
@@ -608,7 +583,6 @@ pub fn show_popup(
     let search_ptr = &*search_field as *const NSTextField as usize; // pass as usize for Send
     let have_items = !items.is_empty() || !pinned.is_empty();
     let history_count = items.len();
-    let _pinned_count = pinned.len();
     let total_count = history_count + pinned.len();
 
     let kb_block = StackBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
