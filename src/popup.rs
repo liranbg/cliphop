@@ -8,8 +8,8 @@ use objc2::runtime::NSObject;
 use objc2::{AnyThread, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationOptions, NSApplicationActivationPolicy,
-    NSBackingStoreType, NSControl, NSEvent, NSEventMask, NSFloatingWindowLevel, NSFont,
-    NSMenu, NSMenuItem, NSPanel, NSTextField, NSView, NSWindowStyleMask, NSWorkspace,
+    NSBackingStoreType, NSControl, NSEvent, NSEventMask, NSFloatingWindowLevel, NSFont, NSMenu,
+    NSMenuItem, NSPanel, NSTextField, NSView, NSWindowStyleMask, NSWorkspace,
 };
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString, ns_string};
 
@@ -373,10 +373,22 @@ fn build_context_menu(
 
     if is_pinned {
         add_context_item(&menu, "Unpin", ctx_tag(CTX_UNPIN, index), delegate, mtm);
-        add_context_item(&menu, "Delete", ctx_tag(CTX_DEL_PINNED, index), delegate, mtm);
+        add_context_item(
+            &menu,
+            "Delete",
+            ctx_tag(CTX_DEL_PINNED, index),
+            delegate,
+            mtm,
+        );
     } else {
         add_context_item(&menu, "Pin", ctx_tag(CTX_PIN, index), delegate, mtm);
-        add_context_item(&menu, "Delete from history", ctx_tag(CTX_DEL_HISTORY, index), delegate, mtm);
+        add_context_item(
+            &menu,
+            "Delete from history",
+            ctx_tag(CTX_DEL_HISTORY, index),
+            delegate,
+            mtm,
+        );
     }
 
     menu
@@ -418,7 +430,7 @@ pub fn show_popup(
     let content_h = (history_h + pinned_h).max(MIN_H);
     let total_h = SEARCH_H + content_h;
 
-    let location = position.unwrap_or_else(|| NSEvent::mouseLocation());
+    let location = position.unwrap_or_else(NSEvent::mouseLocation);
     let frame = NSRect::new(
         NSPoint::new(location.x, location.y - total_h),
         NSSize::new(W, total_h),
@@ -525,8 +537,7 @@ pub fn show_popup(
 
                 // Text label — offset to the right of the icon
                 let text_x: f64 = 22.0;
-                let text_label =
-                    NSTextField::labelWithString(&NSString::from_str(label), mtm);
+                let text_label = NSTextField::labelWithString(&NSString::from_str(label), mtm);
                 text_label.setFrame(NSRect::new(
                     NSPoint::new(text_x, 5.0),
                     NSSize::new(W - text_x - 8.0, ROW_H - 10.0),
@@ -706,13 +717,13 @@ pub fn show_popup(
             _ => {
                 // For printable characters, predict the resulting search text and filter
                 let chars = unsafe { event.as_ref().characters() };
-                if let Some(ch) = chars.and_then(|s| s.to_string().chars().next()) {
-                    if !ch.is_control() {
-                        let search_ref = unsafe { &*(search_ptr as *const NSTextField) };
-                        let mut query = search_ref.stringValue().to_string();
-                        query.push(ch);
-                        apply_filter(&query);
-                    }
+                if let Some(ch) = chars.and_then(|s| s.to_string().chars().next())
+                    && !ch.is_control()
+                {
+                    let search_ref = unsafe { &*(search_ptr as *const NSTextField) };
+                    let mut query = search_ref.stringValue().to_string();
+                    query.push(ch);
+                    apply_filter(&query);
                 }
                 event.as_ptr()
             }
@@ -764,16 +775,11 @@ pub fn show_popup(
 
     // Restore focus to previous app (only for Paste actions — mutating
     // actions like Pin/Delete will reopen the popup immediately).
-    let is_terminal = matches!(
-        result,
-        None | Some(PopupAction::Paste { .. })
-    );
+    let is_terminal = matches!(result, None | Some(PopupAction::Paste { .. }));
     if is_terminal {
         if let Some(prev) = &frontmost {
             #[allow(deprecated)]
-            prev.activateWithOptions(
-                NSApplicationActivationOptions::ActivateIgnoringOtherApps,
-            );
+            prev.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
         }
         // Restore accessory policy (hides Dock icon).
         app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
