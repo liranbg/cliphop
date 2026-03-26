@@ -8,8 +8,8 @@ use objc2::runtime::NSObject;
 use objc2::{AnyThread, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationOptions, NSApplicationActivationPolicy,
-    NSBackingStoreType, NSControl, NSEvent, NSEventMask, NSFloatingWindowLevel, NSFont,
-    NSMenu, NSMenuItem, NSPanel, NSTextField, NSView, NSWindowStyleMask, NSWorkspace,
+    NSBackingStoreType, NSControl, NSEvent, NSEventMask, NSFloatingWindowLevel, NSFont, NSMenu,
+    NSMenuItem, NSPanel, NSTextField, NSView, NSWindowStyleMask, NSWorkspace,
 };
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString, ns_string};
 
@@ -341,6 +341,27 @@ fn ctx_decode(tag: isize) -> (isize, usize) {
     (kind, index)
 }
 
+fn add_context_item(
+    menu: &NSMenu,
+    title: &str,
+    tag: isize,
+    delegate: &ContextMenuDelegate,
+    mtm: MainThreadMarker,
+) {
+    let item = unsafe {
+        NSMenuItem::initWithTitle_action_keyEquivalent(
+            mtm.alloc(),
+            &NSString::from_str(title),
+            Some(sel!(contextAction:)),
+            ns_string!(""),
+        )
+    };
+    item.setTag(tag);
+    item.setEnabled(true);
+    unsafe { item.setTarget(Some(delegate)) };
+    menu.addItem(&item);
+}
+
 fn build_context_menu(
     is_pinned: bool,
     index: usize,
@@ -351,57 +372,23 @@ fn build_context_menu(
     menu.setAutoenablesItems(false);
 
     if is_pinned {
-        let unpin = unsafe {
-            NSMenuItem::initWithTitle_action_keyEquivalent(
-                mtm.alloc(),
-                &NSString::from_str("Unpin"),
-                Some(sel!(contextAction:)),
-                ns_string!(""),
-            )
-        };
-        unpin.setTag(ctx_tag(CTX_UNPIN, index));
-        unpin.setEnabled(true);
-        unsafe { unpin.setTarget(Some(delegate)) };
-        menu.addItem(&unpin);
-
-        let delete = unsafe {
-            NSMenuItem::initWithTitle_action_keyEquivalent(
-                mtm.alloc(),
-                &NSString::from_str("Delete"),
-                Some(sel!(contextAction:)),
-                ns_string!(""),
-            )
-        };
-        delete.setTag(ctx_tag(CTX_DEL_PINNED, index));
-        delete.setEnabled(true);
-        unsafe { delete.setTarget(Some(delegate)) };
-        menu.addItem(&delete);
+        add_context_item(&menu, "Unpin", ctx_tag(CTX_UNPIN, index), delegate, mtm);
+        add_context_item(
+            &menu,
+            "Delete",
+            ctx_tag(CTX_DEL_PINNED, index),
+            delegate,
+            mtm,
+        );
     } else {
-        let pin = unsafe {
-            NSMenuItem::initWithTitle_action_keyEquivalent(
-                mtm.alloc(),
-                &NSString::from_str("Pin"),
-                Some(sel!(contextAction:)),
-                ns_string!(""),
-            )
-        };
-        pin.setTag(ctx_tag(CTX_PIN, index));
-        pin.setEnabled(true);
-        unsafe { pin.setTarget(Some(delegate)) };
-        menu.addItem(&pin);
-
-        let delete = unsafe {
-            NSMenuItem::initWithTitle_action_keyEquivalent(
-                mtm.alloc(),
-                &NSString::from_str("Delete from history"),
-                Some(sel!(contextAction:)),
-                ns_string!(""),
-            )
-        };
-        delete.setTag(ctx_tag(CTX_DEL_HISTORY, index));
-        delete.setEnabled(true);
-        unsafe { delete.setTarget(Some(delegate)) };
-        menu.addItem(&delete);
+        add_context_item(&menu, "Pin", ctx_tag(CTX_PIN, index), delegate, mtm);
+        add_context_item(
+            &menu,
+            "Delete from history",
+            ctx_tag(CTX_DEL_HISTORY, index),
+            delegate,
+            mtm,
+        );
     }
 
     menu
@@ -443,7 +430,7 @@ pub fn show_popup(
     let content_h = (history_h + pinned_h).max(MIN_H);
     let total_h = SEARCH_H + content_h;
 
-    let location = position.unwrap_or_else(|| NSEvent::mouseLocation());
+    let location = position.unwrap_or_else(NSEvent::mouseLocation);
     let frame = NSRect::new(
         NSPoint::new(location.x, location.y - total_h),
         NSSize::new(W, total_h),
@@ -550,8 +537,7 @@ pub fn show_popup(
 
                 // Text label — offset to the right of the icon
                 let text_x: f64 = 22.0;
-                let text_label =
-                    NSTextField::labelWithString(&NSString::from_str(label), mtm);
+                let text_label = NSTextField::labelWithString(&NSString::from_str(label), mtm);
                 text_label.setFrame(NSRect::new(
                     NSPoint::new(text_x, 5.0),
                     NSSize::new(W - text_x - 8.0, ROW_H - 10.0),
@@ -608,7 +594,6 @@ pub fn show_popup(
     let search_ptr = &*search_field as *const NSTextField as usize; // pass as usize for Send
     let have_items = !items.is_empty() || !pinned.is_empty();
     let history_count = items.len();
-    let _pinned_count = pinned.len();
     let total_count = history_count + pinned.len();
 
     let kb_block = StackBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
@@ -732,13 +717,13 @@ pub fn show_popup(
             _ => {
                 // For printable characters, predict the resulting search text and filter
                 let chars = unsafe { event.as_ref().characters() };
-                if let Some(ch) = chars.and_then(|s| s.to_string().chars().next()) {
-                    if !ch.is_control() {
-                        let search_ref = unsafe { &*(search_ptr as *const NSTextField) };
-                        let mut query = search_ref.stringValue().to_string();
-                        query.push(ch);
-                        apply_filter(&query);
-                    }
+                if let Some(ch) = chars.and_then(|s| s.to_string().chars().next())
+                    && !ch.is_control()
+                {
+                    let search_ref = unsafe { &*(search_ptr as *const NSTextField) };
+                    let mut query = search_ref.stringValue().to_string();
+                    query.push(ch);
+                    apply_filter(&query);
                 }
                 event.as_ptr()
             }
@@ -790,16 +775,11 @@ pub fn show_popup(
 
     // Restore focus to previous app (only for Paste actions — mutating
     // actions like Pin/Delete will reopen the popup immediately).
-    let is_terminal = matches!(
-        result,
-        None | Some(PopupAction::Paste { .. })
-    );
+    let is_terminal = matches!(result, None | Some(PopupAction::Paste { .. }));
     if is_terminal {
         if let Some(prev) = &frontmost {
             #[allow(deprecated)]
-            prev.activateWithOptions(
-                NSApplicationActivationOptions::ActivateIgnoringOtherApps,
-            );
+            prev.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
         }
         // Restore accessory policy (hides Dock icon).
         app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);

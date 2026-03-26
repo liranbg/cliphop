@@ -277,6 +277,8 @@ fn main() {
                             ));
                             if history.select_pinned(index).is_some() {
                                 paste::simulate_paste(target_pid);
+                                save_history(&history);
+                                update_tray(&tray, &history);
                             }
                             break;
                         }

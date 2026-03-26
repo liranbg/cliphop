@@ -81,6 +81,17 @@ fn invoke_reregister_fn(combo: &str) -> Result<(), String> {
     })
 }
 
+fn cancel_hotkey_recording_and_restore_badge() {
+    stop_hotkey_recording();
+    let combo = cliphop::config::load().hotkey;
+    let display = crate::hotkey::display_combo(&combo);
+    HOTKEY_BADGE.with(|b| {
+        if let Some(badge) = b.borrow().as_ref() {
+            badge.setStringValue(&NSString::from_str(&display));
+        }
+    });
+}
+
 fn stop_hotkey_recording() {
     HOTKEY_MONITOR.with(|m| {
         if let Some(monitor) = m.borrow_mut().take() {
@@ -331,15 +342,7 @@ define_class!(
 
         #[unsafe(method(cancelRecording:))]
         fn cancel_recording(&self, _sender: &NSObject) {
-            stop_hotkey_recording();
-            // Restore badge to current config hotkey display
-            let combo = cliphop::config::load().hotkey;
-            let display = crate::hotkey::display_combo(&combo);
-            HOTKEY_BADGE.with(|b| {
-                if let Some(badge) = b.borrow().as_ref() {
-                    badge.setStringValue(&NSString::from_str(&display));
-                }
-            });
+            cancel_hotkey_recording_and_restore_badge();
         }
     }
 );
@@ -360,14 +363,7 @@ define_class!(
     impl HotkeyTimerTarget {
         #[unsafe(method(timerFired:))]
         fn timer_fired(&self, _sender: &NSObject) {
-            stop_hotkey_recording();
-            let combo = cliphop::config::load().hotkey;
-            let display = crate::hotkey::display_combo(&combo);
-            HOTKEY_BADGE.with(|b| {
-                if let Some(badge) = b.borrow().as_ref() {
-                    badge.setStringValue(&NSString::from_str(&display));
-                }
-            });
+            cancel_hotkey_recording_and_restore_badge();
         }
     }
 );
