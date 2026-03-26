@@ -79,6 +79,9 @@ fi
 # Test 2: App launches and stays alive
 echo ""
 echo "Launching Cliphop..."
+# Bypass macOS Keychain with a random in-process key so no password dialog appears.
+export CLIPHOP_HISTORY_KEY
+CLIPHOP_HISTORY_KEY=$(openssl rand -hex 32)
 "$BINARY" &
 APP_PID=$!
 sleep 2

@@ -30,7 +30,10 @@ fn poll_detects_new_clipboard_content() {
     let mut history = ClipboardHistory::new();
     write_to_clipboard("test_poll_1");
 
-    assert!(history.poll().is_some(), "poll() should return true for new content");
+    assert!(
+        history.poll().is_some(),
+        "poll() should return true for new content"
+    );
     assert_eq!(history.items().len(), 1);
     assert_eq!(history.items()[0], "test_poll_1");
 }
@@ -41,7 +44,10 @@ fn poll_returns_false_when_no_change() {
     write_to_clipboard("test_no_change");
     history.poll();
 
-    assert!(history.poll().is_none(), "poll() should return false when unchanged");
+    assert!(
+        history.poll().is_none(),
+        "poll() should return false when unchanged"
+    );
 }
 
 #[test]

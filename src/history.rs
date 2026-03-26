@@ -344,7 +344,12 @@ mod tests {
         let path = tmp_path("cliphop_hist_test_pinned_rt");
         let _ = fs::remove_file(&path);
         let key = test_key();
-        save_all_to(&path, key, &["regular".to_string()], &["pinned".to_string()]);
+        save_all_to(
+            &path,
+            key,
+            &["regular".to_string()],
+            &["pinned".to_string()],
+        );
         let entries = load_from(&path, key);
         assert_eq!(entries.len(), 2);
         assert!(matches!(&entries[0], HistoryEntry::Text(s) if s == "regular"));

@@ -495,15 +495,16 @@ fn show_settings(mtm: MainThreadMarker) {
     //   264: Separator (Accessibility / General)
     //   244: General header
     //   222: Launch at login checkbox
-    //   198: Hotkey row (label + badge + Record… button)
-    //   184: Separator (General / History)
-    //   164: History header
-    //   142: Items retained row
-    //   120: Clear all history label + Clear button
-    //   108: Separator (History / Logging)
-    //    88: Logging header
-    //    66: Verbose logging checkbox
-    //    44: Log file path + Open button
+    //   200: Hotkey row (label + badge + Record… button)
+    //   180: Hotkey hint
+    //   168: Separator (General / History)
+    //   148: History header
+    //   122: Items retained row
+    //    98: Clear all history label + Clear button
+    //    86: Separator (History / Logging)
+    //    66: Logging header
+    //    44: Verbose logging checkbox
+    //    22: Log file path + Open button
     let h: f64 = 320.0;
     let container = NSView::initWithFrame(
         mtm.alloc(),
@@ -636,25 +637,25 @@ fn show_settings(mtm: MainThreadMarker) {
     // History row: "Items retained" label + editable text field + stepper + range hint
     let items_label = NSTextField::labelWithString(&NSString::from_str("Items retained"), mtm);
     items_label.setFrame(NSRect::new(
-        NSPoint::new(0.0, 142.0),
+        NSPoint::new(0.0, 122.0),
         NSSize::new(110.0, 22.0),
     ));
     container.addSubview(&items_label);
 
     let current_limit = cliphop::clipboard::get_max_history() as isize;
 
-    // y=144 (vs label at y=142): 2px upward nudge to optically center the text field
+    // y=124 (vs label at y=122): 2px upward nudge to optically center the text field
     // against the taller "Items retained" label.
     let history_field = NSTextField::initWithFrame(
         mtm.alloc(),
-        NSRect::new(NSPoint::new(114.0, 144.0), NSSize::new(44.0, 19.0)),
+        NSRect::new(NSPoint::new(114.0, 124.0), NSSize::new(44.0, 19.0)),
     );
     history_field.setIntegerValue(current_limit);
     container.addSubview(&history_field);
 
     let stepper = NSStepper::initWithFrame(
         mtm.alloc(),
-        NSRect::new(NSPoint::new(160.0, 142.0), NSSize::new(19.0, 22.0)),
+        NSRect::new(NSPoint::new(160.0, 122.0), NSSize::new(19.0, 22.0)),
     );
     unsafe {
         stepper.setMinValue(cliphop::config::MIN_MAX_HISTORY as f64);
@@ -682,7 +683,7 @@ fn show_settings(mtm: MainThreadMarker) {
         mtm,
     );
     range_hint.setFrame(NSRect::new(
-        NSPoint::new(184.0, 142.0),
+        NSPoint::new(184.0, 122.0),
         NSSize::new(80.0, 22.0),
     ));
     range_hint.setTextColor(Some(&NSColor::secondaryLabelColor()));
@@ -694,7 +695,7 @@ fn show_settings(mtm: MainThreadMarker) {
     let clear_btn_target = ClearButtonTarget::new();
     let clear_label = NSTextField::labelWithString(&NSString::from_str("Clear all history"), mtm);
     clear_label.setFrame(NSRect::new(
-        NSPoint::new(0.0, 120.0),
+        NSPoint::new(0.0, 98.0),
         NSSize::new(W - 140.0, 22.0),
     ));
     clear_label.setTextColor(Some(&NSColor::systemRedColor()));
@@ -708,17 +709,17 @@ fn show_settings(mtm: MainThreadMarker) {
         )
     };
     clear_button.setFrame(NSRect::new(
-        NSPoint::new(W - 130.0, 120.0),
+        NSPoint::new(W - 130.0, 98.0),
         NSSize::new(130.0, 28.0),
     ));
     container.addSubview(&clear_button);
 
     // Separator (History / Logging)
-    let sep2 = make_separator(108.0, mtm);
+    let sep2 = make_separator(86.0, mtm);
     container.addSubview(&sep2);
 
     // Section: Logging
-    let log_header = make_header("Logging", 88.0, mtm);
+    let log_header = make_header("Logging", 66.0, mtm);
     container.addSubview(&log_header);
 
     let checkbox = unsafe {
@@ -729,7 +730,7 @@ fn show_settings(mtm: MainThreadMarker) {
             mtm,
         )
     };
-    checkbox.setFrame(NSRect::new(NSPoint::new(0.0, 66.0), NSSize::new(W, 20.0)));
+    checkbox.setFrame(NSRect::new(NSPoint::new(0.0, 44.0), NSSize::new(W, 20.0)));
     let current_state = if cliphop::log::is_verbose() {
         NSControlStateValueOn
     } else {
@@ -748,7 +749,7 @@ fn show_settings(mtm: MainThreadMarker) {
         )
     };
     open_log_btn.setFrame(NSRect::new(
-        NSPoint::new(W - 55.0, 40.0),
+        NSPoint::new(W - 55.0, 18.0),
         NSSize::new(55.0, 22.0),
     ));
     container.addSubview(&open_log_btn);
@@ -758,7 +759,7 @@ fn show_settings(mtm: MainThreadMarker) {
         mtm,
     );
     path_label.setFrame(NSRect::new(
-        NSPoint::new(0.0, 44.0),
+        NSPoint::new(0.0, 22.0),
         NSSize::new(W - 60.0, 18.0),
     ));
     path_label.setTextColor(Some(&NSColor::secondaryLabelColor()));
@@ -782,7 +783,35 @@ fn show_settings(mtm: MainThreadMarker) {
     // Start live accessibility status polling (updates label & button while modal runs)
     let timer = start_accessibility_timer(ax_status, open_button);
 
+    // Close the settings dialog when the app loses focus (user clicks another window).
+    // Without this, the modal session stays active but hidden, blocking the tray.
+    let deactivate_observer = unsafe {
+        let nc_cls = objc2::runtime::AnyClass::get(c"NSNotificationCenter").unwrap();
+        let nc: Retained<NSObject> = msg_send![nc_cls, defaultCenter];
+        let app = NSApplication::sharedApplication(mtm);
+        let block = StackBlock::new(|_notif: NonNull<NSObject>| {
+            let mtm = MainThreadMarker::new_unchecked();
+            NSApplication::sharedApplication(mtm).stopModal();
+        });
+        let name = NSString::from_str("NSApplicationDidResignActiveNotification");
+        let observer: Retained<NSObject> = msg_send![
+            &*nc,
+            addObserverForName: &*name,
+            object: &*app,
+            queue: Option::<&NSObject>::None,
+            usingBlock: &block
+        ];
+        observer
+    };
+
     alert.runModal();
+
+    // Remove the deactivation observer
+    unsafe {
+        let nc_cls = objc2::runtime::AnyClass::get(c"NSNotificationCenter").unwrap();
+        let nc: Retained<NSObject> = msg_send![nc_cls, defaultCenter];
+        let (): () = msg_send![&*nc, removeObserver: &*deactivate_observer];
+    }
 
     // Stop the timer and clear view references
     stop_accessibility_timer(&timer);

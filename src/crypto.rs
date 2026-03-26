@@ -33,6 +33,14 @@ pub fn decrypt(
 }
 
 pub fn get_or_create_key() -> Result<[u8; 32], CryptoError> {
+    // When CLIPHOP_HISTORY_KEY is set to a 64-character hex string, use it
+    // directly and skip the macOS Keychain entirely. Intended for test
+    // environments where the Keychain access dialog must not appear.
+    if let Ok(hex) = std::env::var("CLIPHOP_HISTORY_KEY") {
+        return hex_decode_32(&hex)
+            .map_err(|e| CryptoError::Keychain(format!("CLIPHOP_HISTORY_KEY invalid: {e}")));
+    }
+
     let entry = keyring::Entry::new("cliphop", "history-key")
         .map_err(|e| CryptoError::Keychain(e.to_string()))?;
 
@@ -51,6 +59,18 @@ pub fn get_or_create_key() -> Result<[u8; 32], CryptoError> {
             generate_and_store_key(&entry)
         }
     }
+}
+
+fn hex_decode_32(hex: &str) -> Result<[u8; 32], String> {
+    if hex.len() != 64 {
+        return Err(format!("expected 64 hex chars, got {}", hex.len()));
+    }
+    let mut out = [0u8; 32];
+    for (i, pair) in hex.as_bytes().chunks(2).enumerate() {
+        let s = std::str::from_utf8(pair).map_err(|e| e.to_string())?;
+        out[i] = u8::from_str_radix(s, 16).map_err(|e| e.to_string())?;
+    }
+    Ok(out)
 }
 
 fn generate_and_store_key(entry: &keyring::Entry) -> Result<[u8; 32], CryptoError> {

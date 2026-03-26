@@ -141,7 +141,9 @@ impl ClipboardHistory {
 
     /// Moves history[idx] to the pinned list. No-op if text already pinned.
     pub fn pin(&mut self, idx: usize) {
-        let Some(text) = self.items.get(idx).cloned() else { return };
+        let Some(text) = self.items.get(idx).cloned() else {
+            return;
+        };
         if self.pinned.iter().any(|p| p == &text) {
             return; // already pinned
         }
@@ -152,7 +154,9 @@ impl ClipboardHistory {
     /// Moves pinned[idx] to the front of history.
     /// Evicts the oldest history item if already at max_history capacity.
     pub fn unpin(&mut self, idx: usize) {
-        let Some(text) = self.pinned.get(idx).cloned() else { return };
+        let Some(text) = self.pinned.get(idx).cloned() else {
+            return;
+        };
         self.pinned.remove(idx);
         let limit = MAX_HISTORY.load(Ordering::Relaxed);
         if self.items.len() >= limit {

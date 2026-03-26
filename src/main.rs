@@ -11,7 +11,7 @@ use cliphop::history::{self, HistoryEntry};
 use cliphop::log;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use objc2_app_kit::NSWorkspace;
-use objc2_foundation::MainThreadMarker;
+use objc2_foundation::{MainThreadMarker, NSPoint};
 use std::time::{Duration, Instant};
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoop};
@@ -73,10 +73,13 @@ fn main() {
 
     let mut hotkey = hotkey::Hotkey::new();
     // Apply saved hotkey combo (may differ from the default "alt+v")
-    if cfg.hotkey != "alt+v" {
-        if let Err(e) = hotkey.re_register(&cfg.hotkey) {
-            log::log(&format!("Failed to apply saved hotkey '{}': {}", cfg.hotkey, e));
-        }
+    if cfg.hotkey != "alt+v"
+        && let Err(e) = hotkey.re_register(&cfg.hotkey)
+    {
+        log::log(&format!(
+            "Failed to apply saved hotkey '{}': {}",
+            cfg.hotkey, e
+        ));
     }
     log::log(&format!("Hotkey registered ({})", cfg.hotkey));
 
@@ -198,33 +201,7 @@ fn main() {
                 history.pinned_items().len(),
             ));
 
-            let items: Vec<(usize, String, String)> = history
-                .items()
-                .iter()
-                .enumerate()
-                .map(|(i, text)| {
-                    (
-                        i,
-                        ClipboardHistory::display_label(text),
-                        ClipboardHistory::display_tooltip(text),
-                    )
-                })
-                .collect();
-
-            let pinned: Vec<(usize, String, String)> = history
-                .pinned_items()
-                .iter()
-                .enumerate()
-                .map(|(i, text)| {
-                    (
-                        i,
-                        ClipboardHistory::display_label(text),
-                        ClipboardHistory::display_tooltip(text),
-                    )
-                })
-                .collect();
-
-            if items.is_empty() && pinned.is_empty() {
+            if history.items().is_empty() && history.pinned_items().is_empty() {
                 log::log("No items to show, skipping popup");
             } else {
                 let target_pid = NSWorkspace::sharedWorkspace()
@@ -232,52 +209,118 @@ fn main() {
                     .map(|a| a.processIdentifier())
                     .unwrap_or(-1);
 
-                log::log_verbose(&format!(
-                    "Showing popup with {} items, {} pinned",
-                    items.len(),
-                    pinned.len()
-                ));
-                match popup::show_popup(&items, &pinned, mtm) {
-                    Some(popup::PopupAction::Paste { pinned: false, index }) => {
-                        log::log_verbose(&format!("Popup: paste history[{}]", index));
-                        if history.select(index).is_some() {
-                            paste::simulate_paste(target_pid);
+                // The popup stays open for mutating actions (pin, unpin, delete).
+                // Each iteration rebuilds items/pinned and re-shows the popup at
+                // the same position.  Only Paste and dismiss (None) exit the loop.
+                let mut popup_pos: Option<NSPoint> = None;
+                loop {
+                    let items: Vec<(usize, String, String)> = history
+                        .items()
+                        .iter()
+                        .enumerate()
+                        .map(|(i, text)| {
+                            (
+                                i,
+                                ClipboardHistory::display_label(text),
+                                ClipboardHistory::display_tooltip(text),
+                            )
+                        })
+                        .collect();
+
+                    let pinned: Vec<(usize, String, String)> = history
+                        .pinned_items()
+                        .iter()
+                        .enumerate()
+                        .map(|(i, text)| {
+                            (
+                                i,
+                                ClipboardHistory::display_label(text),
+                                ClipboardHistory::display_tooltip(text),
+                            )
+                        })
+                        .collect();
+
+                    if items.is_empty() && pinned.is_empty() {
+                        log::log("All items removed, closing popup");
+                        break;
+                    }
+
+                    log::log(&format!(
+                        "Showing popup: {} history, {} pinned",
+                        items.len(),
+                        pinned.len()
+                    ));
+                    let (action, pos) =
+                        popup::show_popup(&items, &pinned, mtm, popup_pos);
+                    popup_pos = Some(pos);
+
+                    match action {
+                        Some(popup::PopupAction::Paste {
+                            pinned: false,
+                            index,
+                        }) => {
+                            log::log(&format!("Popup: paste history[{}]", index));
+                            if history.select(index).is_some() {
+                                paste::simulate_paste(target_pid);
+                                save_history(&history);
+                                update_tray(&tray, &history);
+                            }
+                            break;
+                        }
+                        Some(popup::PopupAction::Paste {
+                            pinned: true,
+                            index,
+                        }) => {
+                            log::log_verbose(&format!(
+                                "Popup: paste pinned[{}]",
+                                index
+                            ));
+                            if history.select_pinned(index).is_some() {
+                                paste::simulate_paste(target_pid);
+                            }
+                            break;
+                        }
+                        Some(popup::PopupAction::Pin { history_index }) => {
+                            log::log_verbose(&format!(
+                                "Popup: pin history[{}]",
+                                history_index
+                            ));
+                            history.pin(history_index);
+                            save_history(&history);
+                            update_tray(&tray, &history);
+                            // Loop: reopen popup with updated content
+                        }
+                        Some(popup::PopupAction::Unpin { pinned_index }) => {
+                            log::log_verbose(&format!(
+                                "Popup: unpin pinned[{}]",
+                                pinned_index
+                            ));
+                            history.unpin(pinned_index);
                             save_history(&history);
                             update_tray(&tray, &history);
                         }
-                    }
-                    Some(popup::PopupAction::Paste { pinned: true, index }) => {
-                        log::log_verbose(&format!("Popup: paste pinned[{}]", index));
-                        if history.select_pinned(index).is_some() {
-                            paste::simulate_paste(target_pid);
+                        Some(popup::PopupAction::DeleteHistory { index }) => {
+                            log::log_verbose(&format!(
+                                "Popup: delete history[{}]",
+                                index
+                            ));
+                            history.delete_history(index);
+                            save_history(&history);
+                            update_tray(&tray, &history);
                         }
-                    }
-                    Some(popup::PopupAction::Pin { history_index }) => {
-                        log::log_verbose(&format!("Popup: pin history[{}]", history_index));
-                        history.pin(history_index);
-                        save_history(&history);
-                        update_tray(&tray, &history);
-                    }
-                    Some(popup::PopupAction::Unpin { pinned_index }) => {
-                        log::log_verbose(&format!("Popup: unpin pinned[{}]", pinned_index));
-                        history.unpin(pinned_index);
-                        save_history(&history);
-                        update_tray(&tray, &history);
-                    }
-                    Some(popup::PopupAction::DeleteHistory { index }) => {
-                        log::log_verbose(&format!("Popup: delete history[{}]", index));
-                        history.delete_history(index);
-                        save_history(&history);
-                        update_tray(&tray, &history);
-                    }
-                    Some(popup::PopupAction::DeletePinned { index }) => {
-                        log::log_verbose(&format!("Popup: delete pinned[{}]", index));
-                        history.delete_pinned(index);
-                        save_history(&history);
-                        update_tray(&tray, &history);
-                    }
-                    None => {
-                        log::log_verbose("Popup dismissed without action");
+                        Some(popup::PopupAction::DeletePinned { index }) => {
+                            log::log_verbose(&format!(
+                                "Popup: delete pinned[{}]",
+                                index
+                            ));
+                            history.delete_pinned(index);
+                            save_history(&history);
+                            update_tray(&tray, &history);
+                        }
+                        None => {
+                            log::log("Popup dismissed without action");
+                            break;
+                        }
                     }
                 }
             }
