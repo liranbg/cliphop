@@ -250,8 +250,7 @@ fn main() {
                         items.len(),
                         pinned.len()
                     ));
-                    let (action, pos) =
-                        popup::show_popup(&items, &pinned, mtm, popup_pos);
+                    let (action, pos) = popup::show_popup(&items, &pinned, mtm, popup_pos);
                     popup_pos = Some(pos);
 
                     match action {
@@ -271,10 +270,7 @@ fn main() {
                             pinned: true,
                             index,
                         }) => {
-                            log::log_verbose(&format!(
-                                "Popup: paste pinned[{}]",
-                                index
-                            ));
+                            log::log_verbose(&format!("Popup: paste pinned[{}]", index));
                             if history.select_pinned(index).is_some() {
                                 paste::simulate_paste(target_pid);
                                 save_history(&history);
@@ -283,38 +279,26 @@ fn main() {
                             break;
                         }
                         Some(popup::PopupAction::Pin { history_index }) => {
-                            log::log_verbose(&format!(
-                                "Popup: pin history[{}]",
-                                history_index
-                            ));
+                            log::log_verbose(&format!("Popup: pin history[{}]", history_index));
                             history.pin(history_index);
                             save_history(&history);
                             update_tray(&tray, &history);
                             // Loop: reopen popup with updated content
                         }
                         Some(popup::PopupAction::Unpin { pinned_index }) => {
-                            log::log_verbose(&format!(
-                                "Popup: unpin pinned[{}]",
-                                pinned_index
-                            ));
+                            log::log_verbose(&format!("Popup: unpin pinned[{}]", pinned_index));
                             history.unpin(pinned_index);
                             save_history(&history);
                             update_tray(&tray, &history);
                         }
                         Some(popup::PopupAction::DeleteHistory { index }) => {
-                            log::log_verbose(&format!(
-                                "Popup: delete history[{}]",
-                                index
-                            ));
+                            log::log_verbose(&format!("Popup: delete history[{}]", index));
                             history.delete_history(index);
                             save_history(&history);
                             update_tray(&tray, &history);
                         }
                         Some(popup::PopupAction::DeletePinned { index }) => {
-                            log::log_verbose(&format!(
-                                "Popup: delete pinned[{}]",
-                                index
-                            ));
+                            log::log_verbose(&format!("Popup: delete pinned[{}]", index));
                             history.delete_pinned(index);
                             save_history(&history);
                             update_tray(&tray, &history);
