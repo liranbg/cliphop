@@ -39,6 +39,13 @@ thread_local! {
     static CONTEXT_HIGHLIGHTED_TAG: Cell<isize> = const { Cell::new(-1) };
 }
 
+/// Returns the string with the last character removed, respecting multi-byte
+/// UTF-8 boundaries. Returns an empty string if the input is empty or single-char.
+fn backspace_str(s: &str) -> &str {
+    let end = s.char_indices().next_back().map_or(0, |(i, _)| i);
+    &s[..end]
+}
+
 // ── Dismiss helper ───────────────────────────────────────────────────────────
 
 /// Stop the running modal session. Safe to call from any ObjC callback on the
@@ -708,9 +715,7 @@ pub fn show_popup(
                 let search_ref = unsafe { &*(search_ptr as *const NSTextField) };
                 let cur = search_ref.stringValue().to_string();
                 if !cur.is_empty() {
-                    // After backspace the text will be one char shorter
-                    let after = &cur[..cur.len().saturating_sub(1)];
-                    apply_filter(after);
+                    apply_filter(backspace_str(&cur));
                 }
                 event.as_ptr()
             }
@@ -786,4 +791,41 @@ pub fn show_popup(
     }
 
     (result, location)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backspace_ascii() {
+        assert_eq!(backspace_str("hello"), "hell");
+    }
+
+    #[test]
+    fn backspace_empty() {
+        assert_eq!(backspace_str(""), "");
+    }
+
+    #[test]
+    fn backspace_single_char() {
+        assert_eq!(backspace_str("a"), "");
+    }
+
+    #[test]
+    fn backspace_hebrew() {
+        // Hebrew chars are multi-byte UTF-8 (2 bytes each)
+        assert_eq!(backspace_str("שלום"), "שלו");
+    }
+
+    #[test]
+    fn backspace_emoji() {
+        // Emoji are 4-byte UTF-8
+        assert_eq!(backspace_str("hi🙂"), "hi");
+    }
+
+    #[test]
+    fn backspace_mixed_scripts() {
+        assert_eq!(backspace_str("abcדהו"), "abcדה");
+    }
 }
