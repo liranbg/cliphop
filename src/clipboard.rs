@@ -129,10 +129,9 @@ impl ClipboardHistory {
         self.last_change_count = pasteboard.changeCount();
     }
 
-    /// Clears the in-memory history and pinned items.
+    /// Clears the in-memory history. Pinned items are preserved.
     pub fn clear(&mut self) {
         self.items.clear();
-        self.pinned.clear();
     }
 
     pub fn pinned_items(&self) -> &VecDeque<String> {
@@ -426,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_clears_both_history_and_pinned() {
+    fn clear_preserves_pinned() {
         let mut h = ClipboardHistory {
             items: VecDeque::from(["a".to_string()]),
             pinned: VecDeque::from(["b".to_string()]),
@@ -434,7 +433,8 @@ mod tests {
         };
         h.clear();
         assert!(h.items().is_empty());
-        assert!(h.pinned_items().is_empty());
+        assert_eq!(h.pinned_items().len(), 1);
+        assert_eq!(h.pinned_items()[0], "b");
     }
 
     #[test]
