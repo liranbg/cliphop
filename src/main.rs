@@ -116,8 +116,8 @@ fn main() {
                     let tray_ptr = &tray as *const tray::Tray;
                     settings::set_clear_fn(move || unsafe {
                         (*history_ptr).clear();
-                        history::clear();
-                        (*tray_ptr).update_items(&[], &[]);
+                        save_history(&*history_ptr);
+                        update_tray(&*tray_ptr, &*history_ptr);
                         log::log("History cleared");
                     });
                 }
