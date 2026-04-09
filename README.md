@@ -27,6 +27,12 @@ Then launch it:
 open -a Cliphop
 ```
 
+> **Note:** Cliphop is not notarized by Apple, so macOS Gatekeeper will block it on first launch with a warning about an unidentified developer. To allow it, run:
+> ```sh
+> xattr -cr /Applications/Cliphop.app
+> ```
+> Then open the app again. This is a one-time step.
+
 > macOS will ask for **Accessibility** permission on first use — grant it in **System Settings > Privacy & Security > Accessibility**.
 
 To uninstall:
