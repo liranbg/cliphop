@@ -41,24 +41,84 @@ pub fn get_or_create_key() -> Result<[u8; 32], CryptoError> {
             .map_err(|e| CryptoError::Keychain(format!("CLIPHOP_HISTORY_KEY invalid: {e}")));
     }
 
-    let entry = keyring::Entry::new("cliphop", "history-key")
-        .map_err(|e| CryptoError::Keychain(e.to_string()))?;
-
-    match entry.get_secret() {
+    match keychain_get() {
         Ok(bytes) if bytes.len() == 32 => {
             let mut key = [0u8; 32];
             key.copy_from_slice(&bytes);
             Ok(key)
         }
         Ok(_) => {
-            // Wrong length — regenerate
-            generate_and_store_key(&entry)
+            // Wrong length — delete and regenerate
+            let _ = keychain_delete();
+            generate_and_store_key()
         }
-        Err(_) => {
-            // Not found (or locked) — generate new key
-            generate_and_store_key(&entry)
+        Err(e) => {
+            crate::log::log_verbose(&format!("keychain_get failed: {:?}", e));
+            // Delete may also fail if ACL blocks us — that's OK,
+            // keychain_set will try delete before add.
+            let _ = keychain_delete();
+            match generate_and_store_key() {
+                Ok(key) => Ok(key),
+                Err(e2) => {
+                    crate::log::log(&format!(
+                        "keychain_set also failed: {:?} (get error was: {:?})",
+                        e2, e
+                    ));
+                    Err(e2)
+                }
+            }
         }
     }
+}
+
+const SERVICE: &str = "cliphop";
+const ACCOUNT: &str = "history-key";
+
+fn keychain_get() -> Result<Vec<u8>, CryptoError> {
+    use security_framework::item::{ItemClass, ItemSearchOptions, SearchResult};
+
+    let results = ItemSearchOptions::new()
+        .class(ItemClass::generic_password())
+        .service(SERVICE)
+        .account(ACCOUNT)
+        .load_data(true)
+        .limit(1)
+        .search()
+        .map_err(|e| CryptoError::Keychain(e.to_string()))?;
+
+    match results.first() {
+        Some(SearchResult::Data(data)) => Ok(data.clone()),
+        _ => Err(CryptoError::Keychain("no entry found".to_string())),
+    }
+}
+
+fn keychain_set(secret: &[u8]) -> Result<(), CryptoError> {
+    use core_foundation::data::CFData;
+    use security_framework::item::{ItemAddOptions, ItemAddValue, ItemClass};
+
+    // Delete any existing entry first (SecItemAdd fails on duplicates)
+    let _ = keychain_delete();
+
+    ItemAddOptions::new(ItemAddValue::Data {
+        class: ItemClass::generic_password(),
+        data: CFData::from_buffer(secret),
+    })
+    .set_service(SERVICE)
+    .set_account_name(ACCOUNT)
+    .set_label("Cliphop History Key")
+    .add()
+    .map_err(|e| CryptoError::Keychain(e.to_string()))
+}
+
+fn keychain_delete() -> Result<(), CryptoError> {
+    use security_framework::item::{ItemClass, ItemSearchOptions};
+
+    ItemSearchOptions::new()
+        .class(ItemClass::generic_password())
+        .service(SERVICE)
+        .account(ACCOUNT)
+        .delete()
+        .map_err(|e| CryptoError::Keychain(e.to_string()))
 }
 
 fn hex_decode_32(hex: &str) -> Result<[u8; 32], String> {
@@ -73,12 +133,10 @@ fn hex_decode_32(hex: &str) -> Result<[u8; 32], String> {
     Ok(out)
 }
 
-fn generate_and_store_key(entry: &keyring::Entry) -> Result<[u8; 32], CryptoError> {
+fn generate_and_store_key() -> Result<[u8; 32], CryptoError> {
     let key_arr = Aes256Gcm::generate_key(OsRng);
     let key: [u8; 32] = key_arr.into();
-    entry
-        .set_secret(&key)
-        .map_err(|e| CryptoError::Keychain(e.to_string()))?;
+    keychain_set(&key)?;
     Ok(key)
 }
 

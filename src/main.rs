@@ -22,10 +22,9 @@ fn update_tray(tray: &tray::Tray, history: &ClipboardHistory) {
     let items: Vec<(String, String)> = history
         .items()
         .iter()
-        .enumerate()
-        .map(|(i, text)| {
+        .map(|text| {
             (
-                format!("{}: {}", i, ClipboardHistory::display_label(text)),
+                ClipboardHistory::display_label(text),
                 ClipboardHistory::display_tooltip(text),
             )
         })
@@ -33,10 +32,9 @@ fn update_tray(tray: &tray::Tray, history: &ClipboardHistory) {
     let pinned: Vec<(String, String)> = history
         .pinned_items()
         .iter()
-        .enumerate()
-        .map(|(i, text)| {
+        .map(|text| {
             (
-                format!("{}: {}", i, ClipboardHistory::display_label(text)),
+                ClipboardHistory::display_label(text),
                 ClipboardHistory::display_tooltip(text),
             )
         })

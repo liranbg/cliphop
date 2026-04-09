@@ -37,8 +37,18 @@ cat > "${BUNDLE_DIR}/Contents/Info.plist" <<EOF
     <string>com.cliphop.app</string>
     <key>CFBundleVersion</key>
     <string>${BUNDLE_VERSION}</string>
+    <key>CFBundleShortVersionString</key>
+    <string>${BUNDLE_VERSION}</string>
+    <key>CFBundleExecutable</key>
+    <string>cliphop</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
     <key>CFBundleIconFile</key>
     <string>Cliphop</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
 </dict>
@@ -56,17 +66,31 @@ rm -rf target/Cliphop.iconset
 
 # ─── 4. Code Sign ─────────────────────────────────────────────────────────────
 #
-# TCC (Accessibility permission) ties access to the app's code-signing identity.
-# With a real Developer ID the identity is "team_id + bundle_id", so permissions
-# survive rebuilds.  With ad-hoc ("-") they are tied to the binary hash and will
-# be revoked on every new build — set SIGNING_IDENTITY to your cert to fix this.
+# A stable code-signing identity is required for Keychain access and
+# Accessibility permissions to persist across rebuilds.
 #
-#   export SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+# Priority:
+#   1. $SIGNING_IDENTITY env var (e.g. "Developer ID Application: ...")
+#   2. "Cliphop Signing" self-signed cert (created by scripts/setup-signing.sh)
+#   3. Ad-hoc "-" (fallback — Keychain and Accessibility will NOT persist)
 #
-SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"   # default: ad-hoc
+if [ -z "${SIGNING_IDENTITY:-}" ]; then
+    if security find-identity -v -p codesigning | grep -q "Cliphop Signing"; then
+        SIGNING_IDENTITY="Cliphop Signing"
+    else
+        SIGNING_IDENTITY="-"
+        echo "WARNING: No signing certificate found. Keychain access and"
+        echo "         Accessibility permissions will not work reliably."
+        echo "         Run: ./scripts/setup-signing.sh"
+    fi
+fi
 
 echo "==> Signing bundle (identity: ${SIGNING_IDENTITY})..."
-codesign --force --deep --sign "$SIGNING_IDENTITY" "$BUNDLE_DIR"
+# Sign the inner binary first, then the outer bundle. Using --deep alone
+# can leave Info.plist unbound, causing "invalid Info.plist" errors from
+# the Security framework (Keychain access, etc.).
+codesign --force --sign "$SIGNING_IDENTITY" "${BUNDLE_DIR}/Contents/MacOS/cliphop"
+codesign --force --sign "$SIGNING_IDENTITY" "$BUNDLE_DIR"
 
 # ─── 5. DMG ───────────────────────────────────────────────────────────────────
 
