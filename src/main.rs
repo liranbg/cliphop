@@ -243,17 +243,6 @@ fn main() {
 
                     if items.is_empty() && pinned.is_empty() {
                         log::log("All items removed, closing popup");
-                        // The last show_popup returned a non-terminal action
-                        // (Delete/Pin/Unpin) which skipped activation-policy
-                        // cleanup. Restore focus and hide the Dock icon now.
-                        if let Some(prev) = &target_app {
-                            #[allow(deprecated)]
-                            prev.activateWithOptions(
-                                NSApplicationActivationOptions::ActivateIgnoringOtherApps,
-                            );
-                        }
-                        let app = NSApplication::sharedApplication(mtm);
-                        app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
                         break;
                     }
 
@@ -321,6 +310,22 @@ fn main() {
                         }
                     }
                 }
+
+                // Always restore focus to the original target app after the
+                // popup loop ends. On the first popup iteration show_popup
+                // handles this itself, but on second+ iterations (after
+                // Pin/Delete/Unpin) show_popup saves Cliphop as "frontmost"
+                // (because we activated ourselves for the panel). Explicitly
+                // restoring here ensures the correct app gets focus so that
+                // simulate_paste delivers Cmd+V to the right process.
+                if let Some(prev) = &target_app {
+                    #[allow(deprecated)]
+                    prev.activateWithOptions(
+                        NSApplicationActivationOptions::ActivateIgnoringOtherApps,
+                    );
+                }
+                let app = NSApplication::sharedApplication(mtm);
+                app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
             }
         }
     });
