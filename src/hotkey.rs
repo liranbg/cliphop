@@ -19,17 +19,26 @@ impl Hotkey {
 
     /// Unregisters the current hotkey and registers a new one from a config string.
     /// Returns Err if the combo string is invalid or registration fails.
+    /// On failure the previous hotkey is re-registered so the app is never left
+    /// without a working hotkey.
     pub fn re_register(&mut self, combo: &str) -> Result<(), String> {
-        self.manager
-            .unregister(self.hotkey)
-            .map_err(|e| e.to_string())?;
         let (mods, code) = parse_combo(combo)?;
         let new_hotkey = HotKey::new(mods, code);
         self.manager
-            .register(new_hotkey)
+            .unregister(self.hotkey)
             .map_err(|e| e.to_string())?;
-        self.hotkey = new_hotkey;
-        Ok(())
+        match self.manager.register(new_hotkey) {
+            Ok(()) => {
+                self.hotkey = new_hotkey;
+                Ok(())
+            }
+            Err(e) => {
+                // Registration failed — restore the previous hotkey so the app
+                // is never left without a working shortcut.
+                let _ = self.manager.register(self.hotkey);
+                Err(e.to_string())
+            }
+        }
     }
 }
 
