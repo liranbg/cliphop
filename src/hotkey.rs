@@ -204,8 +204,29 @@ pub fn combo_from_event_flags(
     const OPT: u64 = 1 << 19; // NSEventModifierFlagOption (Alt)
     const CTRL: u64 = 1 << 18; // NSEventModifierFlagControl
 
-    let key_char = chars_ignoring_mods.to_lowercase();
-    let code = str_to_code(key_char.trim())?;
+    // Map special characters from NSEvent.charactersIgnoringModifiers to
+    // the human-readable names that str_to_code expects. Without this,
+    // space (" "), tab ("\t"), and function keys ("\u{F704}"…) are lost
+    // by to_lowercase + trim or simply absent from the str_to_code table.
+    let key_name = match chars_ignoring_mods {
+        " " => "space".to_string(),
+        "\t" => "tab".to_string(),
+        "," => "comma".to_string(),
+        s if s.starts_with('\u{F704}') => "f1".to_string(),
+        s if s.starts_with('\u{F705}') => "f2".to_string(),
+        s if s.starts_with('\u{F706}') => "f3".to_string(),
+        s if s.starts_with('\u{F707}') => "f4".to_string(),
+        s if s.starts_with('\u{F708}') => "f5".to_string(),
+        s if s.starts_with('\u{F709}') => "f6".to_string(),
+        s if s.starts_with('\u{F70A}') => "f7".to_string(),
+        s if s.starts_with('\u{F70B}') => "f8".to_string(),
+        s if s.starts_with('\u{F70C}') => "f9".to_string(),
+        s if s.starts_with('\u{F70D}') => "f10".to_string(),
+        s if s.starts_with('\u{F70E}') => "f11".to_string(),
+        s if s.starts_with('\u{F70F}') => "f12".to_string(),
+        other => other.to_lowercase(),
+    };
+    let code = str_to_code(key_name.trim())?;
 
     let mut mods = Modifiers::empty();
     if modifier_bits & CMD != 0 {
@@ -298,5 +319,40 @@ mod tests {
                 "round-trip failed for {combo}"
             );
         }
+    }
+
+    #[test]
+    fn combo_from_event_flags_space() {
+        // NSEvent.charactersIgnoringModifiers returns " " for Space
+        let opt: u64 = 1 << 19;
+        let combo = combo_from_event_flags(opt, " ").unwrap();
+        assert_eq!(combo, "alt+space");
+    }
+
+    #[test]
+    fn combo_from_event_flags_tab() {
+        let opt: u64 = 1 << 19;
+        let combo = combo_from_event_flags(opt, "\t").unwrap();
+        assert_eq!(combo, "alt+tab");
+    }
+
+    #[test]
+    fn combo_from_event_flags_function_key() {
+        // NSEvent.charactersIgnoringModifiers returns U+F704 for F1
+        let ctrl: u64 = 1 << 18;
+        let combo = combo_from_event_flags(ctrl, "\u{F704}").unwrap();
+        assert_eq!(combo, "ctrl+f1");
+    }
+
+    #[test]
+    fn combo_from_event_flags_regular_key() {
+        let opt: u64 = 1 << 19;
+        let combo = combo_from_event_flags(opt, "v").unwrap();
+        assert_eq!(combo, "alt+v");
+    }
+
+    #[test]
+    fn combo_from_event_flags_no_modifier_returns_err() {
+        assert!(combo_from_event_flags(0, "v").is_err());
     }
 }
