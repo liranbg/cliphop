@@ -10,7 +10,9 @@ use cliphop::config;
 use cliphop::history::{self, HistoryEntry};
 use cliphop::log;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
-use objc2_app_kit::NSWorkspace;
+use objc2_app_kit::{
+    NSApplication, NSApplicationActivationOptions, NSApplicationActivationPolicy, NSWorkspace,
+};
 use objc2_foundation::{MainThreadMarker, NSPoint};
 use std::time::{Duration, Instant};
 use tao::event::{Event, StartCause};
@@ -202,8 +204,9 @@ fn main() {
             if history.items().is_empty() && history.pinned_items().is_empty() {
                 log::log("No items to show, skipping popup");
             } else {
-                let target_pid = NSWorkspace::sharedWorkspace()
-                    .frontmostApplication()
+                let target_app = NSWorkspace::sharedWorkspace().frontmostApplication();
+                let target_pid = target_app
+                    .as_ref()
                     .map(|a| a.processIdentifier())
                     .unwrap_or(-1);
 
@@ -240,6 +243,17 @@ fn main() {
 
                     if items.is_empty() && pinned.is_empty() {
                         log::log("All items removed, closing popup");
+                        // The last show_popup returned a non-terminal action
+                        // (Delete/Pin/Unpin) which skipped activation-policy
+                        // cleanup. Restore focus and hide the Dock icon now.
+                        if let Some(prev) = &target_app {
+                            #[allow(deprecated)]
+                            prev.activateWithOptions(
+                                NSApplicationActivationOptions::ActivateIgnoringOtherApps,
+                            );
+                        }
+                        let app = NSApplication::sharedApplication(mtm);
+                        app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
                         break;
                     }
 
