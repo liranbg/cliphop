@@ -660,32 +660,32 @@ pub fn show_popup(
                 // Enter — paste the keyboard-selected row, or first visible row
                 if POPUP_ACTION.with(|c| c.get()).is_none() {
                     let sel = SELECTED_ROW.with(|c| c.get());
-                    let index = sel.unwrap_or_else(|| {
+                    let index = sel.or_else(|| {
                         // Find first visible row
-                        (0..total_count)
-                            .find(|&i| {
-                                row_info.get(i).is_some_and(|(ptr, _)| unsafe {
-                                    !(&*(*ptr as *const PopupRowView as *const NSView)).isHidden()
-                                })
+                        (0..total_count).find(|&i| {
+                            row_info.get(i).is_some_and(|(ptr, _)| unsafe {
+                                !(&*(*ptr as *const PopupRowView as *const NSView)).isHidden()
                             })
-                            .unwrap_or(0)
+                        })
                     });
-                    if index < history_count {
-                        POPUP_ACTION.with(|c| {
-                            c.set(Some(PopupAction::Paste {
-                                pinned: false,
-                                index,
-                            }))
-                        });
-                    } else {
-                        POPUP_ACTION.with(|c| {
-                            c.set(Some(PopupAction::Paste {
-                                pinned: true,
-                                index: index - history_count,
-                            }))
-                        });
+                    if let Some(index) = index {
+                        if index < history_count {
+                            POPUP_ACTION.with(|c| {
+                                c.set(Some(PopupAction::Paste {
+                                    pinned: false,
+                                    index,
+                                }))
+                            });
+                        } else {
+                            POPUP_ACTION.with(|c| {
+                                c.set(Some(PopupAction::Paste {
+                                    pinned: true,
+                                    index: index - history_count,
+                                }))
+                            });
+                        }
+                        stop_modal();
                     }
-                    stop_modal();
                 }
                 std::ptr::null_mut()
             }
