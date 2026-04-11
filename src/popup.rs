@@ -689,25 +689,25 @@ pub fn show_popup(
                 }
                 std::ptr::null_mut()
             }
-            35 if have_items => {
+            35 if have_items && SELECTED_ROW.with(|c| c.get()).is_some() => {
                 // 'p' key — pin selected history row / unpin selected pinned row
-                if let Some(index) = SELECTED_ROW.with(|c| c.get()) {
-                    if index < history_count {
-                        POPUP_ACTION.with(|c| {
-                            c.set(Some(PopupAction::Pin {
-                                history_index: index,
-                            }))
-                        });
-                        stop_modal();
-                    } else {
-                        POPUP_ACTION.with(|c| {
-                            c.set(Some(PopupAction::Unpin {
-                                pinned_index: index - history_count,
-                            }))
-                        });
-                        stop_modal();
-                    }
+                // Guard: only when a row is selected; otherwise fall through to
+                // the default arm so 'p' reaches the search field.
+                let index = SELECTED_ROW.with(|c| c.get()).unwrap();
+                if index < history_count {
+                    POPUP_ACTION.with(|c| {
+                        c.set(Some(PopupAction::Pin {
+                            history_index: index,
+                        }))
+                    });
+                } else {
+                    POPUP_ACTION.with(|c| {
+                        c.set(Some(PopupAction::Unpin {
+                            pinned_index: index - history_count,
+                        }))
+                    });
                 }
+                stop_modal();
                 std::ptr::null_mut()
             }
             51 => {
