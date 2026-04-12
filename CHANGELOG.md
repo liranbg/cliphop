@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.3.5]
 
 ### Fixed
 - Separator between history and pinned sections in the popup is now visible; it was rendered as a plain NSView (which draws nothing) instead of NSBox with separator type, and its y-position overlapped the bottom edge of the last history row by 1 pixel
