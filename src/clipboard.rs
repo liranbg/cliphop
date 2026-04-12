@@ -208,18 +208,12 @@ impl ClipboardHistory {
     }
 
     /// Replaces newlines with ↩ symbols and truncates to `max_len` characters,
-    /// appending "..." if truncated.
+    /// appending "..." if truncated. Treats `\r\n` as a single newline so
+    /// Windows-style line endings produce one ↩ instead of two.
     fn truncate_clean(text: &str, max_len: usize) -> String {
         let cleaned: String = text
-            .chars()
-            .map(|c| {
-                if c == '\n' || c == '\r' {
-                    '\u{21A9}'
-                } else {
-                    c
-                }
-            })
-            .collect();
+            .replace("\r\n", "\u{21A9}")
+            .replace(['\r', '\n'], "\u{21A9}");
 
         if cleaned.chars().count() > max_len {
             let truncated: String = cleaned.chars().take(max_len).collect();
@@ -297,9 +291,28 @@ mod tests {
 
     #[test]
     fn display_label_only_newlines() {
+        // "\n\r\n" = standalone LF + Windows CRLF → two arrows, not three
         assert_eq!(
             ClipboardHistory::display_label("\n\r\n"),
-            "\u{21A9}\u{21A9}\u{21A9}"
+            "\u{21A9}\u{21A9}"
+        );
+    }
+
+    #[test]
+    fn display_label_crlf_counts_as_one_newline() {
+        // Windows-style \r\n should produce a single ↩, not two
+        assert_eq!(
+            ClipboardHistory::display_label("line1\r\nline2\r\nline3"),
+            "line1\u{21A9}line2\u{21A9}line3"
+        );
+    }
+
+    #[test]
+    fn display_label_standalone_cr_replaced() {
+        // Classic Mac \r should still produce one ↩
+        assert_eq!(
+            ClipboardHistory::display_label("line1\rline2"),
+            "line1\u{21A9}line2"
         );
     }
 
