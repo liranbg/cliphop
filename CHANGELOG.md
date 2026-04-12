@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- Popup now always shows the latest clipboard content; previously, pressing the hotkey immediately after copying could show stale history because the clipboard poll only ran on the 500ms timer tick, not on hotkey activation
 - Windows-style `\r\n` line endings in clipboard entries now display as a single ↩ symbol instead of two; standalone `\r` and `\n` continue to display as one ↩ each
 - Pressing Enter in the popup with a search query that matches no items no longer pastes the first history item; the keypress is now ignored when all rows are filtered out
 - Dock icon no longer stays visible after deleting all items through the popup context menu; activation policy is now properly restored to Accessory mode

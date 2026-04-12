@@ -201,6 +201,15 @@ fn main() {
                 history.pinned_items().len(),
             ));
 
+            // Ensure the clipboard is up-to-date before showing the popup.
+            // Polling normally happens on ResumeTimeReached (every 500ms),
+            // but the hotkey event may fire between ticks (WaitCancelled),
+            // so the most recent copy could be missing from the history.
+            if history.poll().is_some() {
+                save_history(&history);
+                update_tray(&tray, &history);
+            }
+
             if history.items().is_empty() && history.pinned_items().is_empty() {
                 log::log("No items to show, skipping popup");
             } else {
