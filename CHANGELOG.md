@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- Separator between history and pinned sections in the popup is now visible; it was rendered as a plain NSView (which draws nothing) instead of NSBox with separator type, and its y-position overlapped the bottom edge of the last history row by 1 pixel
 - Popup now always shows the latest clipboard content; previously, pressing the hotkey immediately after copying could show stale history because the clipboard poll only ran on the 500ms timer tick, not on hotkey activation
 - Windows-style `\r\n` line endings in clipboard entries now display as a single ↩ symbol instead of two; standalone `\r` and `\n` continue to display as one ↩ each
 - Pressing Enter in the popup with a search query that matches no items no longer pastes the first history item; the keypress is now ignored when all rows are filtered out

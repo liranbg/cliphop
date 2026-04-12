@@ -8,8 +8,8 @@ use objc2::runtime::NSObject;
 use objc2::{AnyThread, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationOptions, NSApplicationActivationPolicy,
-    NSBackingStoreType, NSControl, NSEvent, NSEventMask, NSFloatingWindowLevel, NSFont, NSMenu,
-    NSMenuItem, NSPanel, NSTextField, NSView, NSWindowStyleMask, NSWorkspace,
+    NSBackingStoreType, NSBox, NSBoxType, NSControl, NSEvent, NSEventMask, NSFloatingWindowLevel,
+    NSFont, NSMenu, NSMenuItem, NSPanel, NSTextField, NSView, NSWindowStyleMask, NSWorkspace,
 };
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString, ns_string};
 
@@ -516,9 +516,15 @@ pub fn show_popup(
 
         // ── Pinned shelf ──────────────────────────────────────────────
         if !pinned.is_empty() {
-            // Thin separator line between history and pinned sections
-            let sep_frame = NSRect::new(NSPoint::new(0.0, row_y + ROW_H), NSSize::new(W, 1.0));
-            let sep = NSView::initWithFrame(mtm.alloc(), sep_frame);
+            // Thin separator line between history and pinned sections.
+            // Placed at row_y + ROW_H - SEP_H so it sits in the 1px gap below
+            // the last history row rather than overlapping with it.
+            let sep_frame = NSRect::new(
+                NSPoint::new(0.0, row_y + ROW_H - SEP_H),
+                NSSize::new(W, SEP_H),
+            );
+            let sep = NSBox::initWithFrame(mtm.alloc(), sep_frame);
+            sep.setBoxType(NSBoxType::Separator);
             content.addSubview(&sep);
             row_y -= 1.0;
 
